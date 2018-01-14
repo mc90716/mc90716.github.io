@@ -1,0 +1,747 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next mist use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Hexo, NexT" />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="云袭" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="CacheBuilder构造LocalCache&amp;emsp;&amp;emsp;CacheBuilder使用了构建者模式来构造LocalCache，CacheBuilder内封装了大量LocalCache的配置参数，在最后一步new LocalCache的时候调用LocalCache的实例化方法，并且将CacheBuilder作为参数传到LocalCache中，从而实现了配置参数的传递">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Guava Cache分析">
+<meta property="og:url" content="http://yoursite.com/2018/01/14/2018.01.14.17/index.html">
+<meta property="og:site_name" content="云袭">
+<meta property="og:description" content="CacheBuilder构造LocalCache&amp;emsp;&amp;emsp;CacheBuilder使用了构建者模式来构造LocalCache，CacheBuilder内封装了大量LocalCache的配置参数，在最后一步new LocalCache的时候调用LocalCache的实例化方法，并且将CacheBuilder作为参数传到LocalCache中，从而实现了配置参数的传递">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/localcache.png">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/segment.png">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/referenceentry.png">
+<meta property="og:updated_time" content="2018-01-14T09:41:22.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Guava Cache分析">
+<meta name="twitter:description" content="CacheBuilder构造LocalCache&amp;emsp;&amp;emsp;CacheBuilder使用了构建者模式来构造LocalCache，CacheBuilder内封装了大量LocalCache的配置参数，在最后一步new LocalCache的时候调用LocalCache的实例化方法，并且将CacheBuilder作为参数传到LocalCache中，从而实现了配置参数的传递">
+<meta name="twitter:image" content="http://ophjf8lbk.bkt.clouddn.com/localcache.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Mist',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2018/01/14/2018.01.14.17/"/>
+
+
+
+
+
+  <title>Guava Cache分析 | 云袭</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+	<a href="https://github.com/myunxi"><img style="position: absolute; top: 0; left: 0; border: 0;" src="https://camo.githubusercontent.com/8b6b8ccc6da3aa5722903da7b58eb5ab1081adee/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f6c6566745f6f72616e67655f6666373630302e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_left_orange_ff7600.png"></a>
+
+	
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">云袭</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-th"></i> <br />
+            
+            分类
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-sitemap">
+          <a href="/sitemap.xml" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-sitemap"></i> <br />
+            
+            站点地图
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/01/14/2018.01.14.17/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="马超">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="云袭">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">Guava Cache分析</h1>
+        
+
+        <div class="post-meta">
+		
+		 <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-01-14T17:29:08+08:00">
+                2018-01-14
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/2018/01/14/2018.01.14.17/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count disqus-comment-count"
+                        data-disqus-identifier="2018/01/14/2018.01.14.17/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <h4 id="CacheBuilder构造LocalCache"><a href="#CacheBuilder构造LocalCache" class="headerlink" title="CacheBuilder构造LocalCache"></a>CacheBuilder构造LocalCache</h4><p>&emsp;&emsp;CacheBuilder使用了构建者模式来构造LocalCache，CacheBuilder内封装了大量LocalCache的配置参数，在最后一步new LocalCache的时候调用LocalCache的实例化方法，并且将CacheBuilder作为参数传到LocalCache中，从而实现了配置参数的传递</p>
+<a id="more"></a>
+<h5 id="LocalCache的两种构建缓存的方式："><a href="#LocalCache的两种构建缓存的方式：" class="headerlink" title="LocalCache的两种构建缓存的方式："></a>LocalCache的两种构建缓存的方式：</h5><p>1、LocalManualCache：在键值找不到的时候手动获取值<br>2、LocalLoadingCache：支持自动加载value<br>这两种方式以静态类的形式存在于LocalCache</p>
+<h4 id="LocalCache主要的属性和内部类"><a href="#LocalCache主要的属性和内部类" class="headerlink" title="LocalCache主要的属性和内部类"></a>LocalCache主要的属性和内部类</h4><p><img src="http://ophjf8lbk.bkt.clouddn.com/localcache.png" alt=""></p>
+<h5 id="Segment主要属性和方法"><a href="#Segment主要属性和方法" class="headerlink" title="Segment主要属性和方法"></a>Segment主要属性和方法</h5><p><img src="http://ophjf8lbk.bkt.clouddn.com/segment.png" alt=""><br><strong> Segment </strong><br>    Segment是LocalCache并发的基本单位。内部有table属性，用于保存该segment下面所有的ReferenceEntry<br>count：volatile类型，该segment内所有存活元素的个数<br>modCount：修改次数，通过该值来控制数据的一致性，通过count和modCount属性来保证线程安全，从而省掉lock开销<br>table：ReferenceEntry数组，数据主要存放在这里</p>
+<p>accessQueue：记录该segment下元素的读取顺序，最新读取的ReferenceEntry被添加到accessQueue末尾，该队列主要用于<br>缓存清理的时候按照读取的顺序进行清理<br>writeQueue：记录该segment下元素的读写属性，最新读写的ReferenceEntry被添加到writeQueue末尾，该队列主要用于缓存清理的时候按照读写的顺序进行清理</p>
+<p>setValue：设置对应的ReferenceEntry的value值<br>get：根据key获取对应的缓存对象<br>lockedGetOrLoad：加锁从缓存中Get数据或者Load数据到缓存中<br>scheduleRefresh：刷新与key相关联的value值</p>
+<h5 id="ReferenceEntry主要的属性"><a href="#ReferenceEntry主要的属性" class="headerlink" title="ReferenceEntry主要的属性"></a>ReferenceEntry主要的属性</h5><p><img src="http://ophjf8lbk.bkt.clouddn.com/referenceentry.png" alt=""><br>ReferenceEntry是Map中的一个Entry节点，该节点除了和Map一样有key、value、hash和next节点之外，还有访问和写更新的两个队列，以及Entry的最近访问时间和最近更新时间，多出来的属性是为了支持缓存必须要有的过期机制。LocalCache的过期机制是建立在segment上的。<br>WriteTime：该Entry最后一次写的时间<br>AccessTime：该Entry最后一次读的时间<br>ReferenceEntry类由枚举工厂EntryFactory来实现，根据key的Strength类型、是否使用accessQueue、是否使用writeQueue来决定不同的EntryFactry实例，并通过它创建相应的ReferenceEntry实例</p>
+<p>key的Strength一共有三种类型：STRONG引用，SOFT引用 ，WEAK引用</p>
+<p>ValueReference<br>ValueReference是ReferenceEntry的一个属性，专门用来封装Entry中的value。LocalCache分别实现了就Strong,Soft,Weak三种形式的ValueReference。<br>ValueReference都有一个对ReferenceEntry的引用。ValueReference之所以要有对ReferenceEntry的引用的原因是：在Value因为WeakReference、SoftReference被回收时，需要使用其key将对应的项从Segment段中移除。</p>
+<h4 id="缓存的回收"><a href="#缓存的回收" class="headerlink" title="缓存的回收"></a>缓存的回收</h4><p>LocalCache提供了4种缓存的回收方式：<br>1、基于容量的回收<br>规定缓存的数目不超过固定值(CacheBuilder.maximunmSize(long))。一旦达到这个值，缓存将尝试回收最近没有使用或总体上使用很少的缓存项(在缓存项的数目达到限定值之前，缓存就可能进行回收操作——通常来说，这种情况发生在缓存项的数目逼近限定值时)<br>2、定时回收<br>expireAfterAccess：在给定时间内没有被读写则回收<br>expireAfterWrite：在给定时间内没有被写则回收<br>3、基于引用的回收<br>通过使用弱引用的键、或弱引用的值、或软引用的值，Guava Cache可以把缓存设置为允许垃圾回收。<br>CacheBuilder.weakKeys：使用弱引用存储键<br>CacheBuilder.weakValue：使用软引用存储值<br>CacheBuilder.softValue：使用软引用存储值<br>4、显式清除<br>在任何时候都可以显示清楚缓存项<br>清除一个：Cache.invalidate(key)<br>批量清除：Cache.invalidateAll(keys)<br>清除所有：Cache.invalidateAll()</p>
+<h4 id="缓存回收的时机"><a href="#缓存回收的时机" class="headerlink" title="缓存回收的时机"></a>缓存回收的时机</h4><p>&emsp;&emsp;在进行缓存的写或者读取的时候才触发缓存的清理。这样做的原因在于：如果要自动地持续清理缓存，就必须有一个线程，这个线程会和用户操作竞争共享锁。处理之外，清理权也可以交给用户手里，可以自己创建一个线程，以固定时间间隔调用Cache.cleanUp()即可。</p>
+<h4 id="缓存的刷新"><a href="#缓存的刷新" class="headerlink" title="缓存的刷新"></a>缓存的刷新</h4><p>&emsp;&emsp;缓存的刷新和回收不一样。刷新表示为键加载新值，这个过程可以是异步的。在刷新操作进行时，缓存仍然可以向其他线程返回旧值。在回收操作中，读线程必须等待新值加载完成。如果刷新过程中出现异常，缓存旧值将会保留，而异常会被记录到日志后丢弃缓存项刷新的时机：缓存项只有被检索时才会真正刷新</p>
+<p>通过重载CacheLoader.reload(K, V)可以扩展刷新时的行为<br>CacheBuilder.refreshAfterWrite(long, TimeUnit)可以为缓存增加自动定时刷新功能</p>
+<p>关于Guava LocalCache的源码注释请看：<br><a href="https://github.com/myunxi/JavaTools/blob/master/src/main/java/com/google/common/cache/LocalCache.java" target="_blank" rel="noopener">https://github.com/myunxi/JavaTools/blob/master/src/main/java/com/google/common/cache/LocalCache.java</a></p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+
+      
+        
+      
+
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/images/avatar.gif"
+               alt="马超" />
+          <p class="site-author-name" itemprop="name">马超</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">1</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+        </div>
+
+        
+        
+
+        
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-4"><a class="nav-link" href="#CacheBuilder构造LocalCache"><span class="nav-number">1.</span> <span class="nav-text">CacheBuilder构造LocalCache</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#LocalCache的两种构建缓存的方式："><span class="nav-number">1.1.</span> <span class="nav-text">LocalCache的两种构建缓存的方式：</span></a></li></ol></li><li class="nav-item nav-level-4"><a class="nav-link" href="#LocalCache主要的属性和内部类"><span class="nav-number">2.</span> <span class="nav-text">LocalCache主要的属性和内部类</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#Segment主要属性和方法"><span class="nav-number">2.1.</span> <span class="nav-text">Segment主要属性和方法</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#ReferenceEntry主要的属性"><span class="nav-number">2.2.</span> <span class="nav-text">ReferenceEntry主要的属性</span></a></li></ol></li><li class="nav-item nav-level-4"><a class="nav-link" href="#缓存的回收"><span class="nav-number">3.</span> <span class="nav-text">缓存的回收</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#缓存回收的时机"><span class="nav-number">4.</span> <span class="nav-text">缓存回收的时机</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#缓存的刷新"><span class="nav-number">5.</span> <span class="nav-text">缓存的刷新</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+<div class="copyright" >
+  
+  &copy; 
+  <span itemprop="copyrightYear">2018</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">马超</span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Mist
+  </a>
+</div>
+
+<div>
+<span id="busuanzi_container_site_pv">
+    【本站总PV量<span id="busuanzi_value_site_pv"></span>次】
+</span>
+
+<span id="busuanzi_container_site_uv">
+  【本站总UV量<span id="busuanzi_value_site_uv"></span>次】
+</span>
+</div>
+
+        
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+      <script id="dsq-count-scr" src="https://yunxi.disqus.com/count.js" async></script>
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://yoursite.com/2018/01/14/2018.01.14.17/';
+          this.page.identifier = '2018/01/14/2018.01.14.17/';
+          this.page.title = 'Guava Cache分析';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://yunxi.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
