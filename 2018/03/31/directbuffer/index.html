@@ -1,0 +1,761 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next mist use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Hexo, NexT" />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="云袭" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;最近在工作中使用到了DirectBuffer来进行临时数据的存放，由于使用的是堆外内存，省去了数据到内核的拷贝，因此效率比用ByteBuffer要高不少。之前看过许多介绍DirectBuffer的文章，在这里从源码的角度上来看一下DirectBuffer的原理。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="深入理解DirectBuffer">
+<meta property="og:url" content="http://yoursite.com/2018/03/31/directbuffer/index.html">
+<meta property="og:site_name" content="云袭">
+<meta property="og:description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;最近在工作中使用到了DirectBuffer来进行临时数据的存放，由于使用的是堆外内存，省去了数据到内核的拷贝，因此效率比用ByteBuffer要高不少。之前看过许多介绍DirectBuffer的文章，在这里从源码的角度上来看一下DirectBuffer的原理。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://p6ga3uyx4.bkt.clouddn.com/%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8.jpg">
+<meta property="og:updated_time" content="2018-04-22T04:55:05.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="深入理解DirectBuffer">
+<meta name="twitter:description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;最近在工作中使用到了DirectBuffer来进行临时数据的存放，由于使用的是堆外内存，省去了数据到内核的拷贝，因此效率比用ByteBuffer要高不少。之前看过许多介绍DirectBuffer的文章，在这里从源码的角度上来看一下DirectBuffer的原理。">
+<meta name="twitter:image" content="http://p6ga3uyx4.bkt.clouddn.com/%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8.jpg">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Mist',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2018/03/31/directbuffer/"/>
+
+
+
+
+
+  <title>深入理解DirectBuffer | 云袭</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+	<a href="https://github.com/myunxi"><img style="position: absolute; top: 0; left: 0; border: 0;" src="https://camo.githubusercontent.com/8b6b8ccc6da3aa5722903da7b58eb5ab1081adee/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f6c6566745f6f72616e67655f6666373630302e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_left_orange_ff7600.png"></a>
+
+	
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">云袭</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-th"></i> <br />
+            
+            分类
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-sitemap">
+          <a href="/sitemap.xml" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-sitemap"></i> <br />
+            
+            站点地图
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/03/31/directbuffer/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="马超">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="云袭">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">深入理解DirectBuffer</h1>
+        
+
+        <div class="post-meta">
+		
+		 <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-03-31T18:00:04+08:00">
+                2018-03-31
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/2018/03/31/directbuffer/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count disqus-comment-count"
+                        data-disqus-identifier="2018/03/31/directbuffer/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <h1 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;最近在工作中使用到了DirectBuffer来进行临时数据的存放，由于使用的是堆外内存，省去了数据到内核的拷贝，因此效率比用ByteBuffer要高不少。之前看过许多介绍DirectBuffer的文章，在这里从源码的角度上来看一下DirectBuffer的原理。</p>
+<a id="more"></a>
+<h1 id="用户态和内核态"><a href="#用户态和内核态" class="headerlink" title="用户态和内核态"></a>用户态和内核态</h1><p>&nbsp;&nbsp;&nbsp;&nbsp; Intel的 X86架构下，为了实现外部应用程序与操作系统运行时的隔离，分为了Ring0-Ring3四种级别的运行模式。Linux/Unix只使用了Ring0和Ring3两个级别。Ring0被称为用户态，Ring3被称为内核态。普通的应用程序只能运行在Ring3，并且不能访问Ring0的地址空间。操作系统运行在Ring0，并提供系统调用供用户态的程序使用。如果用户态的程序的某一个操作需要内核态来协助完成(例如读取磁盘上的某一段数据)，那么用户态的程序就会通过系统调用来调用内核态的接口，请求操作系统来完成某种操作。<br>&nbsp;&nbsp;&nbsp;&nbsp;下图是用户态调用内核态的示意图：<br><img src="http://p6ga3uyx4.bkt.clouddn.com/%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8.jpg" alt=""></p>
+<h1 id="DirectBuffer的创建"><a href="#DirectBuffer的创建" class="headerlink" title="DirectBuffer的创建"></a>DirectBuffer的创建</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;使用下面一行代码就可以创建一个1024字节的DirectBuffer：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ByteBuffer.allocateDirect(<span class="number">1024</span>);</span><br></pre></td></tr></table></figure></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;该方法调用的是new DirectByteBuffer(int cap)。DirectByteBuffer的构造函数是包级私有的，因此外部是调用不到的。<br>下面我们来看一下这行代码背后的逻辑:<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">DirectByteBuffer(<span class="keyword">int</span> cap) &#123;                   <span class="comment">// package-private</span></span><br><span class="line">    <span class="keyword">super</span>(-<span class="number">1</span>, <span class="number">0</span>, cap, cap);</span><br><span class="line">    <span class="keyword">boolean</span> pa = VM.isDirectMemoryPageAligned();  <span class="comment">//是否页对齐</span></span><br><span class="line">    <span class="keyword">int</span> ps = Bits.pageSize();    <span class="comment">//获取pageSize大小</span></span><br><span class="line">    <span class="keyword">long</span> size = Math.max(<span class="number">1L</span>, (<span class="keyword">long</span>) cap + (pa ? ps : <span class="number">0</span>));  <span class="comment">//如果是页对齐的话，那么就加上一页的大小</span></span><br><span class="line">    Bits.reserveMemory(size, cap);   <span class="comment">//对分配的直接内存做一个记录</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">long</span> base = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        base = unsafe.allocateMemory(size);  <span class="comment">//实际分配内存</span></span><br><span class="line">    &#125; <span class="keyword">catch</span> (OutOfMemoryError x) &#123;</span><br><span class="line">        Bits.unreserveMemory(size, cap);</span><br><span class="line">        <span class="keyword">throw</span> x;</span><br><span class="line">    &#125;</span><br><span class="line">    unsafe.setMemory(base, size, (<span class="keyword">byte</span>) <span class="number">0</span>);   <span class="comment">//初始化内存</span></span><br><span class="line">    <span class="comment">//计算地址</span></span><br><span class="line">    <span class="keyword">if</span> (pa &amp;&amp; (base % ps != <span class="number">0</span>)) &#123;</span><br><span class="line">        <span class="comment">// Round up to page boundary</span></span><br><span class="line">        address = base + ps - (base &amp; (ps - <span class="number">1</span>));</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        address = base;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">//生成Cleaner</span></span><br><span class="line">    cleaner = Cleaner.create(<span class="keyword">this</span>, <span class="keyword">new</span> Deallocator(base, size, cap));</span><br><span class="line">    att = <span class="keyword">null</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;DirectBuffer的构造函数主要做以下三个事情：<br>1、根据页对齐和pageSize来确定本次的要分配内存实际大小<br>2、实际分配内存，并且记录分配的内存大小<br>3、声明一个Cleaner对象用于清理该DirectBuffer内存</p>
+<p><strong><em>需要注意的是DirectBuffer的创建是比较耗时的，所以在一些高性能的中间件或者应用下一般会做一个对象池，用于重复利用DirectBuffer。</em></strong></p>
+<h1 id="DirectBuffer的使用"><a href="#DirectBuffer的使用" class="headerlink" title="DirectBuffer的使用"></a>DirectBuffer的使用</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;查看DirectBuffer类的方法声明，对于DirectBuffer的使用主要有两类方法，putXXX和getXXX。<br>putXXX方法(以putInt为例)：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> ByteBuffer <span class="title">putInt</span><span class="params">(<span class="keyword">int</span> x)</span> </span>&#123;</span><br><span class="line">    putInt(ix(nextPutIndex((<span class="number">1</span> &lt;&lt; <span class="number">2</span>))), x);</span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">this</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">private</span> ByteBuffer <span class="title">putInt</span><span class="params">(<span class="keyword">long</span> a, <span class="keyword">int</span> x)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (unaligned) &#123;</span><br><span class="line">        <span class="keyword">int</span> y = (x);</span><br><span class="line">        unsafe.putInt(a, (nativeByteOrder ? y : Bits.swap(y)));</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        Bits.putInt(a, x, bigEndian);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">this</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;putInt方法会根据是否是内存对齐分别调用unsafe.putInt或者Bits.putInt来把数据放到直接内存中。Bits.putInt实际上会根据是大端或者是小端来区分如何把数据放到直接内存中，放的方式同样是调用unsage.putInt。</p>
+<p>getXXX方法(以getInt为例)：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">int</span> <span class="title">getInt</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> getInt(ix(nextGetIndex((<span class="number">1</span> &lt;&lt; <span class="number">2</span>))));</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">int</span> <span class="title">getInt</span><span class="params">(<span class="keyword">long</span> a)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (unaligned) &#123;</span><br><span class="line">        <span class="keyword">int</span> x = unsafe.getInt(a);</span><br><span class="line">        <span class="keyword">return</span> (nativeByteOrder ? x : Bits.swap(x));</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> Bits.getInt(a, bigEndian);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;首先判断是否是页对齐，如果不是页对齐，那么直接通过unsafe.getInt来获取数据；如果是页对齐，那么通过Bits.getInt方法来获取数据。Bits.getInt同样是根据大端还是小端，调用unsafe.getInt来获取数据。</p>
+<h1 id="DirectBuffer内存回收"><a href="#DirectBuffer内存回收" class="headerlink" title="DirectBuffer内存回收"></a>DirectBuffer内存回收</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;DirectBuffer内存回收主要有两种方式，一种是通过System.gc来回收，另一种是通过构造函数里创建的Cleaner对象来回收。</p>
+<h2 id="System-gc回收"><a href="#System-gc回收" class="headerlink" title="System.gc回收"></a>System.gc回收</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;在DirectBuffer的构造函数中，用到了Bit.reserveMemory这个方法，该方法如下<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">reserveMemory</span><span class="params">(<span class="keyword">long</span> size, <span class="keyword">int</span> cap)</span> </span>&#123;</span><br><span class="line">        ······</span><br><span class="line">        <span class="keyword">if</span> (tryReserveMemory(size, cap)) &#123;</span><br><span class="line">            <span class="keyword">return</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        ······</span><br><span class="line">        <span class="keyword">while</span> (jlra.tryHandlePendingReference()) &#123;</span><br><span class="line">            <span class="keyword">if</span> (tryReserveMemory(size, cap)) &#123;</span><br><span class="line">                <span class="keyword">return</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        </span><br><span class="line">        System.gc();</span><br><span class="line">        <span class="comment">// a retry loop with exponential back-off delays</span></span><br><span class="line">        <span class="comment">// (this gives VM some time to do it's job)</span></span><br><span class="line">        <span class="keyword">boolean</span> interrupted = <span class="keyword">false</span>;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            <span class="keyword">long</span> sleepTime = <span class="number">1</span>;</span><br><span class="line">            <span class="keyword">int</span> sleeps = <span class="number">0</span>;</span><br><span class="line">            <span class="keyword">while</span> (<span class="keyword">true</span>) &#123;</span><br><span class="line">                <span class="keyword">if</span> (tryReserveMemory(size, cap)) &#123;</span><br><span class="line">                    <span class="keyword">return</span>;</span><br><span class="line">                &#125;</span><br><span class="line">                <span class="keyword">if</span> (sleeps &gt;= MAX_SLEEPS) &#123;</span><br><span class="line">                    <span class="keyword">break</span>;</span><br><span class="line">                &#125;</span><br><span class="line">                <span class="keyword">if</span> (!jlra.tryHandlePendingReference()) &#123;</span><br><span class="line">                    <span class="keyword">try</span> &#123;</span><br><span class="line">                        Thread.sleep(sleepTime);</span><br><span class="line">                        sleepTime &lt;&lt;= <span class="number">1</span>;</span><br><span class="line">                        sleeps++;</span><br><span class="line">                    &#125; <span class="keyword">catch</span> (InterruptedException e) &#123;</span><br><span class="line">                        interrupted = <span class="keyword">true</span>;</span><br><span class="line">                    &#125;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">// no luck</span></span><br><span class="line">            <span class="keyword">throw</span> <span class="keyword">new</span> OutOfMemoryError(<span class="string">"Direct buffer memory"</span>);</span><br><span class="line">        &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">            <span class="keyword">if</span> (interrupted) &#123;</span><br><span class="line">                <span class="comment">// don't swallow interrupts</span></span><br><span class="line">                Thread.currentThread().interrupt();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;reserveMemory方法首先尝试分配内存，如果分配成功的话，那么就直接退出。如果分配失败那么就通过调用tryHandlePendingReference来尝试清理堆外内存(最终调用的是Cleaner的clean方法，其实就是unsafe.freeMemory然后释放内存)，清理完内存之后再尝试分配内存。如果还是失败，调用System.gc()来触发一次FullGC进行回收(前提是没有加-XX:-+DisableExplicitGC参数)。GC完之后再进行内存分配，失败的话就会进行sleep，然后再进行尝试。每次sleep的时间是逐步增加的，规律是1, 2, 4, 8, 16, 32, 64, 128, 256 (total 511 ms ~ 0.5 s)。如果最终还没有可分配的内存，那么就会抛出OOM异常。<br>&nbsp;&nbsp;&nbsp;&nbsp;为什么是通过调用tryHandlePendingReference来回收内存呢？答案是JVM在判断内存不可达之后会把需要GC的不可达对象放在一个PendingList中，然后应用程序就可以看到这些对象。通过调用tryHandlePendingReference来访问这些不可达对象。如果不可达对象是Cleaner类型，也就是说关联了堆外的DirectBuffer，那么该DirectBuffer就可以被回收了，通过调用Cleaner的clean方法来回收这部分堆外内存。<br><strong><em>这个逻辑就是进行堆外内存分配时触发的回收内存逻辑，也就是说在分配的时候如果遇到堆外内存不足，可能会触发FullGC，然后尝试进行分配。这也是为什么在一些用到堆外内存的应用中不建议加上-XX:-+DisableExplicitGC参数</em></strong>。</p>
+<h2 id="Cleaner对象回收"><a href="#Cleaner对象回收" class="headerlink" title="Cleaner对象回收"></a>Cleaner对象回收</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;另个触发堆外内存回收的时机是通过Cleaner对象的clean方法进行回收。在每次新建一个DirectBuffer对象的时候，会同时创建一个Cleaner对象，同一个进程创建的所有的DirectBuffer对象跟Cleaner对象的个数是一样的，并且所有的Cleaner对象会组成一个链表，前后相连。<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> Cleaner <span class="title">create</span><span class="params">(Object ob, Runnable thunk)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (thunk == <span class="keyword">null</span>)</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">null</span>;</span><br><span class="line">        <span class="keyword">return</span> add(<span class="keyword">new</span> Cleaner(ob, thunk));</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure></p>
+<p>Cleaner对象的clean方法执行时机是JVM在判断该Cleaner对象关联的DirectBuffer已经不被任何对象引用了(也就是经过可达性分析判定为不可达的时候)。此时Cleaner对象会被JVM挂到PendingList上。然后有一个固定的线程扫描这个List，如果遇到Cleaner对象，那么就执行clean方法。</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;DirectBuffer在一些高性能的中间件上使用还是相当广泛的。正确的使用可以提升程序的性能，降低GC的频率。</p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2018/01/20/pigeon/" rel="next" title="pigeon">
+                <i class="fa fa-chevron-left"></i> pigeon
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+	  <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/images/avatar.gif"
+               alt="马超" />
+          <p class="site-author-name" itemprop="name">马超</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">3</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+        </div>
+
+        
+        
+
+        
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#介绍"><span class="nav-number">1.</span> <span class="nav-text">介绍</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#用户态和内核态"><span class="nav-number">2.</span> <span class="nav-text">用户态和内核态</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#DirectBuffer的创建"><span class="nav-number">3.</span> <span class="nav-text">DirectBuffer的创建</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#DirectBuffer的使用"><span class="nav-number">4.</span> <span class="nav-text">DirectBuffer的使用</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#DirectBuffer内存回收"><span class="nav-number">5.</span> <span class="nav-text">DirectBuffer内存回收</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#System-gc回收"><span class="nav-number">5.1.</span> <span class="nav-text">System.gc回收</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Cleaner对象回收"><span class="nav-number">5.2.</span> <span class="nav-text">Cleaner对象回收</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+<div class="copyright" >
+  
+  &copy; 
+  <span itemprop="copyrightYear">2018</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">马超</span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Mist
+  </a>
+</div>
+
+<div>
+<span id="busuanzi_container_site_pv">
+    【本站总PV量<span id="busuanzi_value_site_pv"></span>次】
+</span>
+
+<span id="busuanzi_container_site_uv">
+  【本站总UV量<span id="busuanzi_value_site_uv"></span>次】
+</span>
+</div>
+
+        
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://yoursite.com/2018/03/31/directbuffer/';
+          this.page.identifier = '2018/03/31/directbuffer/';
+          this.page.title = '深入理解DirectBuffer';
+        };
+        var d = document, s = d.createElement('script');
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
