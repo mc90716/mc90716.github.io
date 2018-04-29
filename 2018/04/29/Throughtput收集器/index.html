@@ -1,0 +1,760 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next mist use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Hexo, NexT" />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="云袭" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;JVM里面的Throughtput收集器是一款关注吞吐量的垃圾收集器。该收集器是唯一一个实现了UseAdaptiveSizePolicy策略的收集器，允许用户通过指定最大暂停时间和垃圾收集时间占总时间的百分比，然后自适应调整JVM的参数来达到配置的目标。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Throughtput收集器">
+<meta property="og:url" content="http://yoursite.com/2018/04/29/Throughtput收集器/index.html">
+<meta property="og:site_name" content="云袭">
+<meta property="og:description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;JVM里面的Throughtput收集器是一款关注吞吐量的垃圾收集器。该收集器是唯一一个实现了UseAdaptiveSizePolicy策略的收集器，允许用户通过指定最大暂停时间和垃圾收集时间占总时间的百分比，然后自适应调整JVM的参数来达到配置的目标。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/GC-Collector.jpg">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/parallel-old.jpg">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/Serial-Old.jpg">
+<meta property="og:updated_time" content="2018-04-29T09:54:17.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Throughtput收集器">
+<meta name="twitter:description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;JVM里面的Throughtput收集器是一款关注吞吐量的垃圾收集器。该收集器是唯一一个实现了UseAdaptiveSizePolicy策略的收集器，允许用户通过指定最大暂停时间和垃圾收集时间占总时间的百分比，然后自适应调整JVM的参数来达到配置的目标。">
+<meta name="twitter:image" content="http://ophjf8lbk.bkt.clouddn.com/GC-Collector.jpg">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Mist',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2018/04/29/Throughtput收集器/"/>
+
+
+
+
+
+  <title>Throughtput收集器 | 云袭</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+	<a href="https://github.com/myunxi"><img style="position: absolute; top: 0; left: 0; border: 0;" src="https://camo.githubusercontent.com/8b6b8ccc6da3aa5722903da7b58eb5ab1081adee/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f6c6566745f6f72616e67655f6666373630302e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_left_orange_ff7600.png"></a>
+
+	
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">云袭</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-th"></i> <br />
+            
+            分类
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-sitemap">
+          <a href="/sitemap.xml" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-sitemap"></i> <br />
+            
+            站点地图
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/04/29/Throughtput收集器/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="马超">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="云袭">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">Throughtput收集器</h1>
+        
+
+        <div class="post-meta">
+		
+		 <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-04-29T15:44:06+08:00">
+                2018-04-29
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/2018/04/29/Throughtput收集器/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count disqus-comment-count"
+                        data-disqus-identifier="2018/04/29/Throughtput收集器/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <h1 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;JVM里面的Throughtput收集器是一款关注吞吐量的垃圾收集器。该收集器是唯一一个实现了UseAdaptiveSizePolicy策略的收集器，允许用户通过指定最大暂停时间和垃圾收集时间占总时间的百分比，然后自适应调整JVM的参数来达到配置的目标。</p>
+<a id="more"></a>
+<h1 id="Throughtput收集器"><a href="#Throughtput收集器" class="headerlink" title="Throughtput收集器"></a>Throughtput收集器</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;先上一张经典的垃圾收集器的图：<br><img src="http://ophjf8lbk.bkt.clouddn.com/GC-Collector.jpg" alt=""><br>&nbsp;&nbsp;&nbsp;&nbsp;这张图相信很多人都看过，展示了各个垃圾收集器之间的搭配。平时我们说的Throughtput收集器就是图中红线框起来的几个收集器。下面会分别来介绍一些这几个收集器的特点和作用。</p>
+<h2 id="ParallelScavenge收集器"><a href="#ParallelScavenge收集器" class="headerlink" title="ParallelScavenge收集器"></a>ParallelScavenge收集器</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;ParallelScavenge收集器收集的是新生代，使用的是Scavenge GC(Copying GC的另外一种叫法)。该收集器是并行的，可以同时多个线程一起执行copying阶段，在多处理器的场景下可以尽最大可能的提高minor gc的效率。ParallelScavenge收集器的目的是达到一个可控制的吞吐量，吞吐量=运行用户代码的时间/(运行用户代码的时间+垃圾收集的时间)，虚拟机总共运行100分钟，其中垃圾收集器运行了1分钟，那么吞吐量就是99%。<br>&nbsp;&nbsp;&nbsp;&nbsp;关于ParallelScavenge收集器有个有趣的来历。HotSpot VM的开发者在开发垃圾收集器的时候都是在分代式框架中开发，并且希望第三方的开发者也是在这个框架中开发自定义的收集器，这样可以和其他收集器很好的配合在一起使用。后来有个开发者不想使用这个框架，于是靠一己之力实现了没有用框架的并行GC，并且这个并行GC的性能还是相当不错的，于是这个并行的GC就被放到了HotSpot VM里，这就是我们看到的ParallelScavenge收集器。这也是为什么这个收集器没法跟CMS配合使用，因为他们根本就不在一个框架内。<br>&nbsp;&nbsp;&nbsp;&nbsp;在使用ParallelScavenge收集器的时候，需要关于关注以下两个配置参数：<br>1、MaxGCPauseMills，这个参数控制允许GC最长的暂停时间，参数允许的值是一个大于0的毫秒数。设置该参数之后，VM会通过控制新生代的大小来达到暂停时间长短的控制的。不要认为把这个参数设置的越小越好，参数越小意味着新生代的空间越小，导致新生代执行垃圾收集的次数增加。举个例子，原来10秒钟执行一次minor gc，每次暂停100毫秒，现在把允许的暂停时间调低成80毫秒，可能导致每5秒钟就会执行一次minor gc，停顿时间降低了，但是吞吐量也下降了。<br>2、GCTimeRatio，垃圾收集时间占总时间的比率。该参数的值应该是一个大于0小于100的整数。如果把此参数设置为19,那允许的最大GC时间就占总时间的5% (即1 /(1 + 19)),默认值为99，就是允许最大1% (即1 /(1+99))的垃圾收集时间。<br>&nbsp;&nbsp;&nbsp;&nbsp;通过调整这两个参数就可以实现对吞吐量和暂停时间的控制，用户不用去关心新生代该设置多少，老年代该设置多少，只需要设置好这两个值，剩下的就交给虚拟机吧，它会帮你调整好对应的大小。新生代可以通过这种方式实现，那么老年代是否也有类似的方式来实现呢，答案是有的，就是图中的Parralled Old。</p>
+<h2 id="Parralled-Old收集器"><a href="#Parralled-Old收集器" class="headerlink" title="Parralled Old收集器"></a>Parralled Old收集器</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;Parralled Old收集器是ParallelScavenge的老年代版本。使用的算法是Mark-Compact。Parralled Old收集器是在JDK1.6之后才出现的，在此之前如果新生代选择使用ParallelScavenge，那么老年代只能选择使用Serial Old，也就是说只能使用单线程收集，为了弥补这个不足，于是开发了Parallel Old收集器。有了Parallel Old收集器之后，Throughtput收集器才真正显示出它的强大之处，在吞吐量和CPU敏感的情况下，都可以考虑使用Parallel Scavenge+Parallel Old的组合。<br>&nbsp;&nbsp;&nbsp;&nbsp;Paralled Old收集器的运行示意图如下：<br><img src="http://ophjf8lbk.bkt.clouddn.com/parallel-old.jpg" alt=""></p>
+<h2 id="Serial-Old收集器"><a href="#Serial-Old收集器" class="headerlink" title="Serial Old收集器"></a>Serial Old收集器</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;Serial Old收集器是一款传统的单线程垃圾收集器，使用Mark-Sweep-Compact算法。这个收集器主要是在Client模式下使用。该收集器的用途有两个：一个是在JDK1.5之前与ParallelScavenge收集器配合使用；第二个用途是作为CMS收集器的后备预案，在CMS发生并发模式失效的时候使用Serial Old收集器进行一次完整的STW的垃圾回收。<br>&nbsp;&nbsp;&nbsp;&nbsp;Serial Old收集器的运行示意图如下：<br><img src="http://ophjf8lbk.bkt.clouddn.com/Serial-Old.jpg" alt=""></p>
+<h1 id="收集器配置"><a href="#收集器配置" class="headerlink" title="收集器配置"></a>收集器配置</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;在JDK1.8下，使用Throughtput收集器有两种配置：<br>1、-XX:+UseParallelGC或者-XX:+UseParallelOldGC，这两个配置下任选一个使用的收集器都是ParallelScavenge+Parralled Old。这与网上大多数说介绍是不一样的，网上大多数介绍是说UseParallelGC配置下使用的是ParallelScavenge+Serial Old，JDK1.8下已经进行了统一，Serial Old已经不再是默认的选择。<br>2、如果想使用Serial Old作为老年代的垃圾收集器可以这样配置：-XX:+UseParallelGC -XX:-UseParallelOldGC。</p>
+<h1 id="GC日志说明"><a href="#GC日志说明" class="headerlink" title="GC日志说明"></a>GC日志说明</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;-XX:+UseParallelGC或者-XX:+UseParallelOldGC参数下的日志：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">2018-04-29T14:55:42.360-0800: [Full GC (System.gc()) [PSYoungGen: 1421K-&gt;0K(76288K)] [ParOldGen: 8K-&gt;1257K(175104K)] 1429K-&gt;1257K(251392K), [Metaspace: 3205K-&gt;3205K(1056768K)], 0.0054702 secs] [Times: user=0.02 sys=0.01, real=0.00 secs]</span><br></pre></td></tr></table></figure></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;-XX:+UseParallelGC -XX:-UseParallelOldGC参数下的日志：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">2018-04-29T15:05:43.409-0800: [Full GC (System.gc()) [PSYoungGen: 1449K-&gt;0K(76288K)] [PSOldGen: 8K-&gt;1265K(175104K)] 1457K-&gt;1265K(251392K), [Metaspace: 3206K-&gt;3206K(1056768K)], 0.0034926 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]</span><br></pre></td></tr></table></figure></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;我使用了System.gc()分别在两种配置下触发GC，通过对比可以发现只有在老年代的收集下是不一样的，第一个用的是ParOldGen，对应的是Parralled Old收集器；第二个用的是PSOldGen，对应的是Serial Old收集器。新生代收集日志PSYoungGen对应的就是Parallel Scavenge收集器。</p>
+<h1 id="收集器调优"><a href="#收集器调优" class="headerlink" title="收集器调优"></a>收集器调优</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;在使用Throughtput收集器的时候强烈不建议手动指定新生代大小和老年代大小，因为这将废弃虚拟机的自适应调整策略。也就意味着你配置的MaxGCPauseMills和GCTimeRatio参数很难真正起作用。用户只需要指定最大最小堆内存，以及MaxGCPauseMills和GCTimeRatio参数即可，剩下的交给VM去处理吧，它会帮你调整到最佳状态，这也是非常人性化的。VM具体的调整包含调整新生代和老年代的大小，以及调整新生代晋升到老年代的年龄等。<br>&nbsp;&nbsp;&nbsp;&nbsp;以上设置的参数，MaxGCPauseMills优先级最高，如果设置了这个值，新生代和老年代会随之进行调整，直到满足对应的停顿时间的目标。一旦这个目标达成，堆的总容量开始增大，直到运行时间达到比率GCTimeRatio设定值。这两个目标达成后，JVM尝试缩小堆大小，尽可能以最小堆来满足这两个目标。</p>
+<h1 id="其他的一些东西"><a href="#其他的一些东西" class="headerlink" title="其他的一些东西"></a>其他的一些东西</h1><h2 id="ParNew与Parallel-Scavenge对比"><a href="#ParNew与Parallel-Scavenge对比" class="headerlink" title="ParNew与Parallel Scavenge对比"></a>ParNew与Parallel Scavenge对比</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;ParNew也是一个新生代的并行GC，ParNew的存在主要是为了配合CMS使用，如果没有ParNew，CMS只能搭配单线程垃圾回收。ParNew与Parallel Scavenge对比有以下几种不同：<br>1、ParNew使用的是广度优先来遍历对象图，Parallel Scavenge使用的是深度优先来遍历对象图<br>2、ParNew没有实现UseAdaptiveSizePolicy策略，而Parallel Scavenge实现了这个策略<br>3、ParNew可以和CMS搭配使用，而Parallel Scavenge不能与CMS搭配使用</p>
+<h2 id="并行GC线程数"><a href="#并行GC线程数" class="headerlink" title="并行GC线程数"></a>并行GC线程数</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;通过-XX:ParallelGCThreads=X来设置并行GC的线程数量，默认情况下跟处理器个数一致。</p>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>1、Throughtput收集器有两种参数，Minor GC和Full GC<br>2、通过Throughtput收集器的动态调整策略是垃圾回收调优的很好切入点，能有效的减少JVM内存使用<br>3、当需要追求吞吐量的时候，Throughtput总是一个不错的选择</p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2018/03/31/directbuffer/" rel="next" title="深入理解DirectBuffer">
+                <i class="fa fa-chevron-left"></i> 深入理解DirectBuffer
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+	  <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/images/avatar.gif"
+               alt="马超" />
+          <p class="site-author-name" itemprop="name">马超</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">4</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+        </div>
+
+        
+        
+
+        
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#介绍"><span class="nav-number">1.</span> <span class="nav-text">介绍</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Throughtput收集器"><span class="nav-number">2.</span> <span class="nav-text">Throughtput收集器</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#ParallelScavenge收集器"><span class="nav-number">2.1.</span> <span class="nav-text">ParallelScavenge收集器</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Parralled-Old收集器"><span class="nav-number">2.2.</span> <span class="nav-text">Parralled Old收集器</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Serial-Old收集器"><span class="nav-number">2.3.</span> <span class="nav-text">Serial Old收集器</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#收集器配置"><span class="nav-number">3.</span> <span class="nav-text">收集器配置</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#GC日志说明"><span class="nav-number">4.</span> <span class="nav-text">GC日志说明</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#收集器调优"><span class="nav-number">5.</span> <span class="nav-text">收集器调优</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#其他的一些东西"><span class="nav-number">6.</span> <span class="nav-text">其他的一些东西</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#ParNew与Parallel-Scavenge对比"><span class="nav-number">6.1.</span> <span class="nav-text">ParNew与Parallel Scavenge对比</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#并行GC线程数"><span class="nav-number">6.2.</span> <span class="nav-text">并行GC线程数</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#总结"><span class="nav-number">7.</span> <span class="nav-text">总结</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+<div class="copyright" >
+  
+  &copy; 
+  <span itemprop="copyrightYear">2018</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">马超</span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Mist
+  </a>
+</div>
+
+<div>
+<span id="busuanzi_container_site_pv">
+    【本站总PV量<span id="busuanzi_value_site_pv"></span>次】
+</span>
+
+<span id="busuanzi_container_site_uv">
+  【本站总UV量<span id="busuanzi_value_site_uv"></span>次】
+</span>
+</div>
+
+        
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://yoursite.com/2018/04/29/Throughtput收集器/';
+          this.page.identifier = '2018/04/29/Throughtput收集器/';
+          this.page.title = 'Throughtput收集器';
+        };
+        var d = document, s = d.createElement('script');
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
