@@ -1,0 +1,812 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next mist use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Hexo, NexT" />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="云袭" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;G1 GC，全称Garbage-First Garbage Collector，通过-XX:+UseG1GC参数来启用。G1收集器是工作在堆内不同分区上的收集器，分区既可以是年轻代也可以是老年代，同一个代的分区不需要连续。并且每个代分区的数量是可以动态调整的。为老年代设置分区的目的是老年代里有的分区垃圾多，有的分区垃圾少，这样在回收的时候可以专注">
+<meta property="og:type" content="article">
+<meta property="og:title" content="G1 GC技术解析">
+<meta property="og:url" content="http://yoursite.com/2018/05/02/G1-GC技术解析/index.html">
+<meta property="og:site_name" content="云袭">
+<meta property="og:description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;G1 GC，全称Garbage-First Garbage Collector，通过-XX:+UseG1GC参数来启用。G1收集器是工作在堆内不同分区上的收集器，分区既可以是年轻代也可以是老年代，同一个代的分区不需要连续。并且每个代分区的数量是可以动态调整的。为老年代设置分区的目的是老年代里有的分区垃圾多，有的分区垃圾少，这样在回收的时候可以专注">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/G1-region.png">
+<meta property="og:updated_time" content="2018-05-03T12:19:39.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="G1 GC技术解析">
+<meta name="twitter:description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;G1 GC，全称Garbage-First Garbage Collector，通过-XX:+UseG1GC参数来启用。G1收集器是工作在堆内不同分区上的收集器，分区既可以是年轻代也可以是老年代，同一个代的分区不需要连续。并且每个代分区的数量是可以动态调整的。为老年代设置分区的目的是老年代里有的分区垃圾多，有的分区垃圾少，这样在回收的时候可以专注">
+<meta name="twitter:image" content="http://ophjf8lbk.bkt.clouddn.com/G1-region.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Mist',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2018/05/02/G1-GC技术解析/"/>
+
+
+
+
+
+  <title>G1 GC技术解析 | 云袭</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+	<a href="https://github.com/myunxi"><img style="position: absolute; top: 0; left: 0; border: 0;" src="https://camo.githubusercontent.com/8b6b8ccc6da3aa5722903da7b58eb5ab1081adee/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f6c6566745f6f72616e67655f6666373630302e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_left_orange_ff7600.png"></a>
+
+	
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">云袭</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-th"></i> <br />
+            
+            分类
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-sitemap">
+          <a href="/sitemap.xml" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-sitemap"></i> <br />
+            
+            站点地图
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/05/02/G1-GC技术解析/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="马超">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="云袭">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">G1 GC技术解析</h1>
+        
+
+        <div class="post-meta">
+		
+		 <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-05-02T19:55:20+08:00">
+                2018-05-02
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/2018/05/02/G1-GC技术解析/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count disqus-comment-count"
+                        data-disqus-identifier="2018/05/02/G1-GC技术解析/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <h1 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;G1 GC，全称Garbage-First Garbage Collector，通过-XX:+UseG1GC参数来启用。G1收集器是工作在堆内不同分区上的收集器，分区既可以是年轻代也可以是老年代，同一个代的分区不需要连续。并且每个代分区的数量是可以动态调整的。为老年代设置分区的目的是老年代里有的分区垃圾多，有的分区垃圾少，这样在回收的时候可以专注于收集垃圾多的分区，这也是G1名称的由来。不过这个算法并不适合新生代垃圾收集，因为新生代的垃圾收集算法是复制算法，但是新生代也使用了分区机制主要是因为便于代大小的调整。<br>&nbsp;&nbsp;&nbsp;&nbsp;G1 GC是设计用来取代CMS的，同CMS相比G1有以下优势：<br>1、可预测的停顿模型<br>2、避免了CMS的垃圾碎片<br>3、超大堆的表现更出色</p>
+<a id="more"></a>
+<h1 id="G1关键概念"><a href="#G1关键概念" class="headerlink" title="G1关键概念"></a>G1关键概念</h1><h2 id="Region"><a href="#Region" class="headerlink" title="Region"></a>Region</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;G1里面的Region的概念不同于传统的垃圾回收算法中的分区的概念。G1默认把堆内存分为1024个分区，后续垃圾收集的单位都是以Region为单位的。Region是实现G1算法的基础，每个Region的大小相等，通过-XX:G1HeapRegionSize参数可以设置Region的大小。如下图所示：<br><img src="http://ophjf8lbk.bkt.clouddn.com/G1-region.png" alt=""><br>图中的E代表是Eden区，S代表Survivor，O代表Old区，H代表humongous表示巨型对象(大小大小Region空间一半的对象)。从图中可以看出各个区域逻辑上并不是连续的。并且一个Region在某一个时刻是Eden，在另一个时刻就可能属于老年代。G1在进行垃圾清理的时候就是将一个Region的对象拷贝到另外一个Region中。</p>
+<h2 id="SATB"><a href="#SATB" class="headerlink" title="SATB"></a>SATB</h2><p>SATB的全称是Snapchat-At-The_Beginning。SATB是维持并发GC的一种手段。G1并发的基础就是SATB。SATB可以理解成在GC开始之前对堆内存里的对象做一次快照，此时活的对象就认为是活的，从而形成一个对象图。在GC收集的时候，新生代的对象也认为是活的对象，除此之外其他不可达的对象都认为是垃圾对象。<br>如何找到在GC的过程中分配的对象呢？每个region记录着两个top-at-mark-start（TAMS）指针，分别为prevTAMS和nextTAMS。在TAMS以上的对象就是新分配的，因而被视为隐式marked。通过这种方式我们就找到了在GC过程中新分配的对象，并把这些对象认为是活的对象。<br>解决了对象在GC过程中分配的问题，那么在GC过程中引用发生变化的问题怎么解决呢， G1给出的解决办法是通过Write Barrier。Write Barrier就是对引用字段进行赋值做了环切。通过Write Barrier就可以了解到哪些引用对象发生了什么样的变化。</p>
+<h2 id="RSet"><a href="#RSet" class="headerlink" title="RSet"></a>RSet</h2><p>RSet全称是Remember Set，每个Region中都有一个RSet，记录的是其他Region中的对象引用本Region对象的关系(谁引用了我的对象)。G1里面还有另外一种数据结构就Collection Set(CSet)，CSet记录的是GC要收集的Region的集合，CSet里的Region可以是任意代的。在GC的时候，对于old-&gt;young和old-&gt;old的跨代对象引用，只要扫描对应的CSet中的RSet即可。</p>
+<h2 id="停顿预测模型"><a href="#停顿预测模型" class="headerlink" title="停顿预测模型"></a>停顿预测模型</h2><p>G1收集器突出表现出来的一点是通过一个停顿预测模型来根据用户配置的停顿时间来选择CSet的大小，从而达到用户期待的应用程序暂停时间。通过-XX:MaxGCPauseMillis参数来设置。这一点有点类似于ParallelScavenge收集器。关于停顿时间的设置并不是越短越好。设置的时间越短意味着每次收集的CSet越小，导致垃圾逐步积累变多，最终不得不退化成Serial GC；停顿时间设置的过长，那么会导致每次都会产生长时间的停顿，影响了程序对外的响应时间。</p>
+<p>#G1回收的过程<br>G1垃圾回收分为两个阶段：<br>1、全局并发标记阶段(Global Concurrent marking)<br>2、拷贝存活对象阶段(evacuation)</p>
+<h2 id="全局并发标记阶段"><a href="#全局并发标记阶段" class="headerlink" title="全局并发标记阶段"></a>全局并发标记阶段</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;全局并发标记阶段是基于SATB的，与CMS有些类似，但是也有不同的地方，主要的几个阶段如下：<br><strong>初始标记：</strong>该阶段会STW。扫描根集合，将所有通过根集合直达的对象压入扫描栈，等待后续的处理。在G1中初始标记阶段是借助Young GC的暂停进行的，不需要额外的暂停。虽然加长了Young GC的暂停时间，但是从总体上来说还是提高的GC的效率。<br><strong>并发标记：</strong>该阶段不需要STW。这个阶段不断的从扫描栈中取出对象进行扫描，将扫描到的对象的字段再压入扫描栈中，依次递归，直到扫描栈为空，也就是说trace了所有GCRoot直达的对象。同时这个阶段还会扫描SATB write barrier所记录下的引用。<br><strong>最终标记：</strong>也叫Remark，这个阶段也是STW的。这个阶段会处理在并发标记阶段write barrier记录下的引用，同时进行弱引用的处理。这个阶段与CMS的最大的区别是CMS在这个阶段会扫描整个根集合，Eden也会作为根集合的一部分被扫描，因此耗时可能会很长。<br><strong>清理：</strong> 该阶段会STW。清点和重置标记状态。这个阶段有点像mark-sweep中的sweep阶段，这个阶段并不会实际上去做垃圾的收集，只是去根据停顿模型来预测出CSet，等待evacuation阶段来回收。</p>
+<h2 id="拷贝存活对象阶段"><a href="#拷贝存活对象阶段" class="headerlink" title="拷贝存活对象阶段"></a>拷贝存活对象阶段</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;Evacuation阶段是全暂停的。该阶段把一部分Region里的活对象拷贝到另一部分Region中，从而实现垃圾的回收清理。Evacuation阶段从第一阶段选出来的Region中筛选出任意多个Region作为垃圾收集的目标，这些要收集的Region叫CSet，通过RSet实现。<br>筛选出CSet之后，G1将并行的将这些Region里的存活对象拷贝到其他Region中，这点类似于ParalledScavenge的拷贝过程，整个过程是完全暂停的。关于停顿时间的控制，就是通过选择CSet的数量来达到控制时间长短的目标。</p>
+<h3 id="G1的收集模式："><a href="#G1的收集模式：" class="headerlink" title="G1的收集模式："></a>G1的收集模式：</h3><p>YoungGC：收集年轻代里的Region<br>MixGC：年轻代的所有Region+全局并发标记阶段选出的收益高的Region<br>无论是YoungGC还是MixGC都只是并发拷贝的阶段。</p>
+<p>分代G1模式下选择CSet有两种子模式，分别对应YoungGC和mixedGC：<br>YoungGC：CSet就是所有年轻代里面的Region<br>MixedGC：CSet是所有年轻代里的Region加上在全局并发标记阶段标记出来的收益高的Region</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;G1的运行过程是这样的，会在Young GC和Mix GC之间不断的切换运行，同时定期的做全局并发标记，在实在赶不上回收速度的情况下使用Full GC(Serial GC)。初始标记是搭在YoungGC上执行的，在进行全局并发标记的时候不会做Mix GC，在做Mix GC的时候也不会启动初始标记阶段。当MixGC赶不上对象产生的速度的时候就退化成Full GC，这一点是需要重点调优的地方。</p>
+<h1 id="G1最佳实践"><a href="#G1最佳实践" class="headerlink" title="G1最佳实践"></a>G1最佳实践</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;在使用G1垃圾收集器的时候遵循以下实践可以少走不少弯路：</p>
+<h2 id="不断调优暂停时间指标"><a href="#不断调优暂停时间指标" class="headerlink" title="不断调优暂停时间指标"></a>不断调优暂停时间指标</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;通过XX:MaxGCPauseMillis=x可以设置启动应用程序暂停的时间，G1在运行的时候会根据这个参数选择CSet来满足响应时间的设置。一般情况下这个值设置到100ms或者200ms都是可以的(不同情况下会不一样)，但如果设置成50ms就不太合理。暂停时间设置的太短，就会导致出现G1跟不上垃圾产生的速度。最终退化成Full GC。所以对这个参数的调优是一个持续的过程，逐步调整到最佳状态。</p>
+<h2 id="不要设置新生代和老年代的大小"><a href="#不要设置新生代和老年代的大小" class="headerlink" title="不要设置新生代和老年代的大小"></a>不要设置新生代和老年代的大小</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;G1收集器在运行的时候会调整新生代和老年代的大小。通过改变代的大小来调整对象晋升的速度以及晋升年龄，从而达到我们为收集器设置的暂停时间目标。设置了新生代大小相当于放弃了G1为我们做的自动调优。我们需要做的只是设置整个堆内存的大小，剩下的交给G1自己去分配各个代的大小。</p>
+<h2 id="关注Evacuation-Failure"><a href="#关注Evacuation-Failure" class="headerlink" title="关注Evacuation Failure"></a>关注Evacuation Failure</h2><p>Evacuation Failure类似于CMS里面的晋升失败，堆空间的垃圾太多导致无法完成Region之间的拷贝，于是不得不退化成Full GC来做一次全局范围内的垃圾收集。</p>
+<h1 id="G1常用参数"><a href="#G1常用参数" class="headerlink" title="G1常用参数"></a>G1常用参数</h1><table>
+<thead>
+<tr>
+<th>参数/默认值</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>-XX:+UseG1GC</td>
+<td>使用 G1 垃圾收集器</td>
+</tr>
+<tr>
+<td>-XX:MaxGCPauseMillis=200</td>
+<td>设置期望达到的最大GC停顿时间指标（JVM会尽力实现，但不保证达到）</td>
+</tr>
+<tr>
+<td>-XX:InitiatingHeapOccupancyPercent=45</td>
+<td>启动并发GC周期时的堆内存占用百分比. G1之类的垃圾收集器用它来触发并发GC周期,基于整个堆的使用率,而不只是某一代内存的使用比. 值为 0 则表示”一直执行GC循环”. 默认值为 45.</td>
+</tr>
+<tr>
+<td>-XX:NewRatio=n</td>
+<td>新生代与老生代(new/old generation)的大小比例(Ratio). 默认值为 2.</td>
+</tr>
+<tr>
+<td>-XX:SurvivorRatio=n</td>
+<td>eden/survivor 空间大小的比例(Ratio). 默认值为 8.</td>
+</tr>
+<tr>
+<td>-XX:MaxTenuringThreshold=n</td>
+<td>提升年老代的最大临界值(tenuring threshold). 默认值为 15.</td>
+</tr>
+<tr>
+<td>-XX:ParallelGCThreads=n</td>
+<td>设置垃圾收集器在并行阶段使用的线程数,默认值随JVM运行的平台不同而不同.</td>
+</tr>
+<tr>
+<td>-XX:ConcGCThreads=n</td>
+<td>并发垃圾收集器使用的线程数量. 默认值随JVM运行的平台不同而不同.</td>
+</tr>
+<tr>
+<td>-XX:G1ReservePercent=n</td>
+<td>设置堆内存保留为假天花板的总量,以降低提升失败的可能性. 默认值是 10.</td>
+</tr>
+<tr>
+<td>-XX:G1HeapRegionSize=n</td>
+<td>使用G1时Java堆会被分为大小统一的的区(region)。此参数可以指定每个heap区的大小. 默认值将根据 heap size 算出最优解. 最小值为 1Mb, 最大值为 32Mb.</td>
+</tr>
+</tbody>
+</table>
+<h1 id="G1日志分析"><a href="#G1日志分析" class="headerlink" title="G1日志分析"></a>G1日志分析</h1><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><span class="line">//新生代GC</span><br><span class="line">2018-05-03T10:21:43.209-0800: [GC pause (G1 Humongous Allocation) (young) (initial-mark), 0.0035356 secs]  //初始标记，耗时0.0035秒</span><br><span class="line">   [Parallel Time: 2.4 ms, GC Workers: 8]  //并行8个线程，耗时2.4ms</span><br><span class="line">      [GC Worker Start (ms): Min: 813.1, Avg: 813.7, Max: 813.9, Diff: 0.7]</span><br><span class="line">      [Ext Root Scanning (ms): Min: 0.0, Avg: 1.1, Max: 1.5, Diff: 1.5, Sum: 9.1]   //每个扫描root的线程耗时</span><br><span class="line">      [Update RS (ms): Min: 0.0, Avg: 0.0, Max: 0.0, Diff: 0.0, Sum: 0.0]   //更新RS的耗时，G1中每块区域都有一个RS与之对应，RS记录了该区域被其他区域引用的对象。回收时，就把RS作为根集的一部分，从而加快回收</span><br><span class="line">         [Processed Buffers: Min: 0, Avg: 0.0, Max: 0, Diff: 0, Sum: 0]  //Processed Buffers就是记录引用变化的缓存空间</span><br><span class="line">      [Scan RS (ms): Min: 0.0, Avg: 0.0, Max: 0.0, Diff: 0.0, Sum: 0.0]   //扫描RS</span><br><span class="line">      [Code Root Scanning (ms): Min: 0.0, Avg: 0.0, Max: 0.0, Diff: 0.0, Sum: 0.0]  //根扫描耗时</span><br><span class="line">      [Object Copy (ms): Min: 0.0, Avg: 0.5, Max: 1.3, Diff: 1.3, Sum: 3.6] //对象拷贝</span><br><span class="line">      [Termination (ms): Min: 0.0, Avg: 0.2, Max: 0.2, Diff: 0.2, Sum: 1.2]   </span><br><span class="line">         [Termination Attempts: Min: 1, Avg: 1.8, Max: 4, Diff: 3, Sum: 14]</span><br><span class="line">      [GC Worker Other (ms): Min: 0.0, Avg: 0.0, Max: 0.0, Diff: 0.0, Sum: 0.1]</span><br><span class="line">      [GC Worker Total (ms): Min: 1.6, Avg: 1.8, Max: 2.3, Diff: 0.8, Sum: 14.1]   //GC线程耗时</span><br><span class="line">      [GC Worker End (ms): Min: 815.4, Avg: 815.4, Max: 815.4, Diff: 0.0]</span><br><span class="line">   [Code Root Fixup: 0.0 ms]</span><br><span class="line">   [Code Root Purge: 0.0 ms]</span><br><span class="line">   [Clear CT: 0.1 ms]   //清空CardTable耗时，RS是依赖CardTable记录区域存活对象的</span><br><span class="line">   [Other: 1.1 ms]</span><br><span class="line">      [Choose CSet: 0.0 ms]   //选取CSet</span><br><span class="line">      [Ref Proc: 0.9 ms]  //弱引用、软引用的处理耗时</span><br><span class="line">      [Ref Enq: 0.0 ms]   //弱引用、软引用的入队耗时</span><br><span class="line">      [Redirty Cards: 0.1 ms]</span><br><span class="line">      [Humongous Register: 0.0 ms]</span><br><span class="line">      [Humongous Reclaim: 0.0 ms]</span><br><span class="line">      [Free CSet: 0.0 ms]   //释放被回收区域的耗时（包含他们的RS）</span><br><span class="line">   [Eden: 5120.0K(24.0M)-&gt;0.0B(12.0M) Survivors: 0.0B-&gt;2048.0K Heap: 16.0M(50.0M)-&gt;12.4M(50.0M)]</span><br><span class="line"> [Times: user=0.01 sys=0.00, real=0.01 secs] </span><br><span class="line"> //根区域扫描</span><br><span class="line">2018-05-03T10:21:43.213-0800: [GC concurrent-root-region-scan-start]</span><br><span class="line">2018-05-03T10:21:43.214-0800: [GC concurrent-root-region-scan-end, 0.0012422 secs]</span><br><span class="line">// 并发标记</span><br><span class="line">2018-05-03T10:21:43.214-0800: [GC concurrent-mark-start]</span><br><span class="line">2018-05-03T10:21:43.214-0800: [GC concurrent-mark-end, 0.0004063 secs]</span><br><span class="line">//重新标记又叫最终标记</span><br><span class="line">2018-05-03T10:21:43.214-0800: [GC remark 2018-05-03T10:21:43.215-0800: [Finalize Marking, 0.0003736 secs] 2018-05-03T10:21:43.215-0800: [GC ref-proc, 0.0000533 secs] 2018-05-03T10:21:43.215-0800: [Unloading, 0.0007439 secs], 0.0013442 secs]</span><br><span class="line"> [Times: user=0.00 sys=0.00, real=0.00 secs] </span><br><span class="line"> //独占清理</span><br><span class="line">2018-05-03T10:21:43.216-0800: [GC cleanup 13M-&gt;13M(50M), 0.0004002 secs]</span><br><span class="line"> [Times: user=0.01 sys=0.00, real=0.00 secs]</span><br></pre></td></tr></table></figure>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;这是一段完整的GC日志。从整体上看，并发标记周期和混合回收的前后都有可能穿插着新生代GC。其中并发标记周期主要是回收老年代空间，当然也包含了一次新生代GC。</p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2018/05/01/CMS收集器/" rel="next" title="CMS收集器">
+                <i class="fa fa-chevron-left"></i> CMS收集器
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+	  <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/images/avatar.gif"
+               alt="马超" />
+          <p class="site-author-name" itemprop="name">马超</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">6</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+        </div>
+
+        
+        
+
+        
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#介绍"><span class="nav-number">1.</span> <span class="nav-text">介绍</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#G1关键概念"><span class="nav-number">2.</span> <span class="nav-text">G1关键概念</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Region"><span class="nav-number">2.1.</span> <span class="nav-text">Region</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SATB"><span class="nav-number">2.2.</span> <span class="nav-text">SATB</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#RSet"><span class="nav-number">2.3.</span> <span class="nav-text">RSet</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#停顿预测模型"><span class="nav-number">2.4.</span> <span class="nav-text">停顿预测模型</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#全局并发标记阶段"><span class="nav-number">2.5.</span> <span class="nav-text">全局并发标记阶段</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#拷贝存活对象阶段"><span class="nav-number">2.6.</span> <span class="nav-text">拷贝存活对象阶段</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#G1的收集模式："><span class="nav-number">2.6.1.</span> <span class="nav-text">G1的收集模式：</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#G1最佳实践"><span class="nav-number">3.</span> <span class="nav-text">G1最佳实践</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#不断调优暂停时间指标"><span class="nav-number">3.1.</span> <span class="nav-text">不断调优暂停时间指标</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#不要设置新生代和老年代的大小"><span class="nav-number">3.2.</span> <span class="nav-text">不要设置新生代和老年代的大小</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关注Evacuation-Failure"><span class="nav-number">3.3.</span> <span class="nav-text">关注Evacuation Failure</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#G1常用参数"><span class="nav-number">4.</span> <span class="nav-text">G1常用参数</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#G1日志分析"><span class="nav-number">5.</span> <span class="nav-text">G1日志分析</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+<div class="copyright" >
+  
+  &copy; 
+  <span itemprop="copyrightYear">2018</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">马超</span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Mist
+  </a>
+</div>
+
+<div>
+<span id="busuanzi_container_site_pv">
+    【本站总PV量<span id="busuanzi_value_site_pv"></span>次】
+</span>
+
+<span id="busuanzi_container_site_uv">
+  【本站总UV量<span id="busuanzi_value_site_uv"></span>次】
+</span>
+</div>
+
+        
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://yoursite.com/2018/05/02/G1-GC技术解析/';
+          this.page.identifier = '2018/05/02/G1-GC技术解析/';
+          this.page.title = 'G1 GC技术解析';
+        };
+        var d = document, s = d.createElement('script');
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
