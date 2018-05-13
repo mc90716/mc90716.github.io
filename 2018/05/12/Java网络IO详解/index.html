@@ -1,0 +1,766 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next mist use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Hexo, NexT" />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="云袭" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;在谈及网络IO的时候总避不开阻塞、非阻塞、同步、异步、IO多路复用、select、poll、epoll等这几个词语。在面试的时候也会被经常问到这几个的区别。本文就来讲一下这几个词语的含义、区别以及使用方式。Unix网络编程一书中作者给出了五种IO模型：1、BlockingIO - 阻塞IO2、NoneBlockingIO - 非阻塞IO3、IO">
+<meta property="og:type" content="article">
+<meta property="og:title" content="一文读懂阻塞、非阻塞、同步、异步IO">
+<meta property="og:url" content="http://yoursite.com/2018/05/12/Java网络IO详解/index.html">
+<meta property="og:site_name" content="云袭">
+<meta property="og:description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;在谈及网络IO的时候总避不开阻塞、非阻塞、同步、异步、IO多路复用、select、poll、epoll等这几个词语。在面试的时候也会被经常问到这几个的区别。本文就来讲一下这几个词语的含义、区别以及使用方式。Unix网络编程一书中作者给出了五种IO模型：1、BlockingIO - 阻塞IO2、NoneBlockingIO - 非阻塞IO3、IO">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/sync-blocking.png">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/sync-nonblocking.png">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/sync-multx.png">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/async.png">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/register.png">
+<meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/select.png">
+<meta property="og:updated_time" content="2018-05-13T01:50:10.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="一文读懂阻塞、非阻塞、同步、异步IO">
+<meta name="twitter:description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;在谈及网络IO的时候总避不开阻塞、非阻塞、同步、异步、IO多路复用、select、poll、epoll等这几个词语。在面试的时候也会被经常问到这几个的区别。本文就来讲一下这几个词语的含义、区别以及使用方式。Unix网络编程一书中作者给出了五种IO模型：1、BlockingIO - 阻塞IO2、NoneBlockingIO - 非阻塞IO3、IO">
+<meta name="twitter:image" content="http://ophjf8lbk.bkt.clouddn.com/sync-blocking.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Mist',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2018/05/12/Java网络IO详解/"/>
+
+
+
+
+
+  <title>一文读懂阻塞、非阻塞、同步、异步IO | 云袭</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+	<a href="https://github.com/myunxi"><img style="position: absolute; top: 0; left: 0; border: 0;" src="https://camo.githubusercontent.com/8b6b8ccc6da3aa5722903da7b58eb5ab1081adee/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f6c6566745f6f72616e67655f6666373630302e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_left_orange_ff7600.png"></a>
+
+	
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">云袭</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-th"></i> <br />
+            
+            分类
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-sitemap">
+          <a href="/sitemap.xml" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-sitemap"></i> <br />
+            
+            站点地图
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/05/12/Java网络IO详解/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="马超">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="云袭">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">一文读懂阻塞、非阻塞、同步、异步IO</h1>
+        
+
+        <div class="post-meta">
+		
+		 <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-05-12T10:59:40+08:00">
+                2018-05-12
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/2018/05/12/Java网络IO详解/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count disqus-comment-count"
+                        data-disqus-identifier="2018/05/12/Java网络IO详解/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <h1 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;在谈及网络IO的时候总避不开阻塞、非阻塞、同步、异步、IO多路复用、select、poll、epoll等这几个词语。在面试的时候也会被经常问到这几个的区别。本文就来讲一下这几个词语的含义、区别以及使用方式。<br>Unix网络编程一书中作者给出了五种IO模型：<br>1、BlockingIO - 阻塞IO<br>2、NoneBlockingIO - 非阻塞IO<br>3、IO multiplexing - IO多路复用<br>4、signal driven IO - 信号驱动IO<br>5、asynchronous IO - 异步IO<br>这五种IO模型中前四个都是同步的IO，只有最后一个是异步IO。信号驱动IO使用的比较少，重点介绍其他几种IO以及在Java中的应用。</p>
+<a id="more"></a>
+<h1 id="阻塞、非阻塞、同步、异步以及IO多路复用"><a href="#阻塞、非阻塞、同步、异步以及IO多路复用" class="headerlink" title="阻塞、非阻塞、同步、异步以及IO多路复用"></a>阻塞、非阻塞、同步、异步以及IO多路复用</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;在进行网络IO的时候会涉及到用户态和内核态，并且在用户态和内核态之间会发生数据交换，从这个角度来说我们可以把IO抽象成两个阶段：1、用户态等待内核态数据准备好，2、将数据从内核态拷贝到用户态。之所以会有同步、异步、阻塞和非阻塞这几种说法就是根据程序在这两个阶段的处理方式不同而产生的。</p>
+<h2 id="同步阻塞"><a href="#同步阻塞" class="headerlink" title="同步阻塞"></a>同步阻塞</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://ophjf8lbk.bkt.clouddn.com/sync-blocking.png" alt=""><br>&nbsp;&nbsp;&nbsp;&nbsp;当在用户态调用read操作的时候，如果这时候kernel还没有准备好数据，那么用户态会一直阻塞等待，直到有数据返回。当kernel准备好数据之后，用户态继续等待kernel把数据从内核态拷贝到用户态之后才可以使用。这里会发生两种等待：一个是用户态等待kernel有数据可以读，另外一个是当有数据可读时用户态等待kernel把数据拷贝到用户态。<br>&nbsp;&nbsp;&nbsp;&nbsp;在Java中同步阻塞的实现对应的是传统的文件IO操作以及Socket的accept的过程。在Socket调用accept的时候，程序会一直等待知道有描述符就绪，并且把就绪的数据拷贝到用户态，然后程序中就可以拿到对应的数据。</p>
+<h2 id="同步非阻塞"><a href="#同步非阻塞" class="headerlink" title="同步非阻塞"></a>同步非阻塞</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://ophjf8lbk.bkt.clouddn.com/sync-nonblocking.png" alt=""><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;对比第一张同步阻塞IO的图就会发现，在同步非阻塞模型下第一个阶段是不等待的，无论有没有数据准备好，都是立即返回。第二个阶段仍然是需要等待的，用户态需要等待内核态把数据拷贝过来才能使用。对于同步非阻塞模式的处理，需要每隔一段时间就去询问一下内核数据是不是可以读了，如果内核说可以，那么就开始第二阶段等待。</p>
+<h2 id="IO多路复用"><a href="#IO多路复用" class="headerlink" title="IO多路复用"></a>IO多路复用</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;IO多路复用也是同步的。<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://ophjf8lbk.bkt.clouddn.com/sync-multx.png" alt=""><br>&nbsp;&nbsp;&nbsp;&nbsp;IO多路复用的方式看起来跟同步阻塞是一样的，两个阶段都是阻塞的，但是IO多路复用可以实现以较小的代价同时监听多个IO。通常情况下是通过一个线程来同时监听多个描述符，只要任何一个满足就绪条件，那么内核态就返回。IO多路复用使得传统的每请求每线程的处理方式得到解耦，一个线程可以同时处理多个IO请求，然后交到后面的线程池里处理，这也是netty等框架的处理方式，所谓的reactor模式。IO多路复用的实现依赖于操作系统的select、poll和epoll，后面会详细介绍这几个系统调用。<br>&nbsp;&nbsp;&nbsp;&nbsp;IO多路复用在Java中的实现方式是在Socket编程中使用非阻塞模式，然后配置感兴趣的事件，通过调用select函数来实现。select函数就是对应的第一个阶段。如果给select配置了超时参数，在指定时间内没有感兴趣事件发生的话，select调用也会返回，这也是为什么要做非阻塞模式下运行。</p>
+<h2 id="异步IO"><a href="#异步IO" class="headerlink" title="异步IO"></a>异步IO</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://ophjf8lbk.bkt.clouddn.com/async.png" alt=""><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;异步模式下，前面提到的两个阶段都不会等待。使用异步模式，用户态调用read方法的时候，相当于告诉内核数据发送给我之后告诉我一声我先去干别的事情了。在这两个阶段都不会等待，只需要在内核态通知数据准备好之后使用即可。通常情况下使用异步模式都会使用callback，当数据可用之后执行callback函数。</p>
+<h1 id="IO多路复用-1"><a href="#IO多路复用-1" class="headerlink" title="IO多路复用"></a>IO多路复用</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;现在用Java开发的网络服务器通常采用IO多路复用的方式来加快网络IO操作，例如Netty、Tomcat等。IO多路复用的基础是select、poll和epoll。这三个函数是从操作系统的角度上支持的IO多路复用的操作，下面就分别来看一下这三个函数。</p>
+<h2 id="select"><a href="#select" class="headerlink" title="select"></a>select</h2><p>函数签名如下：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">int select(int maxfdp1, fd_set *readset,fd_set *writeset,fd_set *exceptset,const struct timeval *timeout)</span><br></pre></td></tr></table></figure></p>
+<p>maxfdp1为指定的待监听的描述符的个数，因为描述符是从0开始的，所以需要加1<br>readset为要监听的读描述符<br>writeset为要监听的写描述符<br>exceptset为要监听的异常描述符<br>timeout监听没有准备好的描述符的话，多久可以返回，支持按照秒或者毫秒来配置时间<br>&nbsp;&nbsp;&nbsp;&nbsp;select操作的逻辑是首先将要监听的读、写以及异常描述符拷贝到内核空间，然后遍历所有的描述符，如果有感兴趣的事件发生，那么就返回。<br>select在使用的过程中有三个问题：<br>1、被监控的fds(描述符)集合限制为1024，1024太小了<br>2、需要将描述符集合从用户空间拷贝到内核空间<br>3、当有描述符可操作的时候都需要遍历一下整个描述符集合才能知道哪个是可操作的，效率很低。</p>
+<h2 id="poll"><a href="#poll" class="headerlink" title="poll"></a>poll</h2><p>函数签名如下：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">int poll(struct pollfd[] fds, unsigned int nfds, int timeout);</span><br></pre></td></tr></table></figure></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;poll操作与select操作类似，仍旧避免不了描述符从用户空间拷贝到内核空间，但是poll不再有1024个描述符的限制。对于事件的触发通知还是使用遍历所有描述符的方式，因此在大量连接的情况下也存在遍历低效的问题。poll函数在传递参数的时候统一的将要监听的描述符和事件封装在了pollfd结构体数组中。</p>
+<h2 id="epoll"><a href="#epoll" class="headerlink" title="epoll"></a>epoll</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;epoll有三个方法：epoll_create、epoll_ctl和epoll_wait。epoll_create是创建一个epoll句柄；epoll_ctl是注册要监听的事件类型；epoll_wait则是等待事件的产生。 通过这三个方法epoll解决了select的三个问题。<br>1、1024数量限制的问题<br>通过epoll_create方法来创建一个epoll句柄，这个句柄监听的描述符的数量不再有限制。<br>2、文件描述符频繁从用户空间拷贝到内核空间的问题<br>通过观察select的操作会发现描述符从用户空间到内核空间拷贝发生在调用select方法的时候，只要没有注册新的事件或者取消注册事件，每次拷贝的描述符都是一样的。因此epoll引入了epoll_ctl调用，该方法用于注册新事件和取消注册事件。而在epoll_wait的时候并不会拷贝描述符，描述符始终存在于内核空间，当需要修改的时候只要调用epoll_ctl修改一下内核的描述符即可。如此一来便省去了描述符来回拷贝的开销。<br>3、文件描述符可操作的时候遍历整个描述符集合的问题<br>在调用epoll_ctl注册感兴趣的事件的时候，实际上会为设置的事件添加一个回调函数，当对应的感兴趣的事件发生的时候，回调函数就会触发，然后将自己加到一个链表中。epoll_wait函数的作用就是去查看这个链表中有没有已经准备就绪的事件，如果有的话就通知应用程序处理，如此操作epoll_wait只需要遍历就绪的事件描述符即可。</p>
+<h1 id="epoll在Java中的使用"><a href="#epoll在Java中的使用" class="headerlink" title="epoll在Java中的使用"></a>epoll在Java中的使用</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;目前针对Java服务器的非阻塞编程基本都是基于epoll的。在进行非阻塞编程的时候有两个步骤：1、注册感兴趣的事情；2、调用select方法，查找感兴趣的事件。</p>
+<h2 id="注册感兴趣的事件"><a href="#注册感兴趣的事件" class="headerlink" title="注册感兴趣的事件"></a>注册感兴趣的事件</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;我们在编写Socket的非阻塞代码的时候需要在Selector上注册感兴趣的事情，通常写法是serverSocketChannel.register(selector, SelectionKey.XXX)。来看一下这行代码背后的执行逻辑是什么样的。<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://ophjf8lbk.bkt.clouddn.com/register.png" alt=""><br>注册的时候实际执行的是EPollSelectorImp。该方法主要有以下三步：<br>1、implRegister方法。在fdToKey的Map中插入channel对应的文件描述法和SelectionKey的映射，当做注册Channel、关闭Channel、取消注册等操作是都是操作此Map。<br>2、往pollWrapper[Epoll实例]中放入channel实例。<br>3、往keys[HashSet]中放入SelectionKey</p>
+<h2 id="select方法"><a href="#select方法" class="headerlink" title="select方法"></a>select方法</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;通过Java的Selector.select方法来获取准备好的键的时候实际执行的代码如下：<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://ophjf8lbk.bkt.clouddn.com/select.png" alt=""><br>首先调用EPollArrayWrapper的poll方法，该方法做两件事：1、调用epollCtl方法向epoll中注册感兴趣的事件；2、调用epollWait方法返回已就绪的文件描述符集合<br>然后调用updateSelectedKeys方法调用把epoll中就绪的文件描述符加到ready队列中等待上层应用处理, updateSelectedKeys通过fdToKey查找文件描述符对应的SelectionKey，并在SelectionKey对应的channel中添加对应的事件到ready队列。</p>
+<h1 id="水平触发LT与边缘触发ET"><a href="#水平触发LT与边缘触发ET" class="headerlink" title="水平触发LT与边缘触发ET"></a>水平触发LT与边缘触发ET</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;epoll支持两种触发模式，分别是水平触发和边缘触发。<br>&nbsp;&nbsp;&nbsp;&nbsp;LT是缺省的工作方式，并且同时支持block和no-block socket。在这种做法中，内核告诉你一个文件描述符是否就绪了，然后你可以对这个就绪的fd进行IO操作。<strong>如果你不作任何操作，内核还是会继续通知你的</strong>。<br>&nbsp;&nbsp;&nbsp;&nbsp;ET是高速工作方式，只支持no-block socket。<strong>在这种模式下，当描述符从未就绪变为就绪时，内核会通知你一次，并且除非你做了某些操作导致那个文件描述符不再为就绪状态了，否则不会再次发送通知</strong>。<br>&nbsp;&nbsp;&nbsp;&nbsp;可以看到，本来内核在被DMA中断，捕获到IO设备来数据后，只需要查找这个数据属于哪个文件描述符，进而通知线程里等待的函数即可，但是，LT要求内核在通知阶段还要继续再扫描一次刚才所建立的内核fd和io对应的那个数组，因为应用程序可能没有真正去读上次通知有数据后的那些fd，这种沟通方式效率是很低下的，只是方便编程而已；<br>&nbsp;&nbsp;&nbsp;&nbsp;JDK并没有实现边缘触发，关于边缘触发和水平触发的差异简单列举如下，边缘触发的性能更高，但编程难度也更高，netty就重新实现了Epoll机制，采用边缘触发方式；另外像nginx等也采用的是边缘触发。</p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2018/05/02/G1-GC技术解析/" rel="next" title="G1 GC技术解析">
+                <i class="fa fa-chevron-left"></i> G1 GC技术解析
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+	  <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/images/avatar.gif"
+               alt="马超" />
+          <p class="site-author-name" itemprop="name">马超</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">7</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+        </div>
+
+        
+        
+
+        
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#介绍"><span class="nav-number">1.</span> <span class="nav-text">介绍</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#阻塞、非阻塞、同步、异步以及IO多路复用"><span class="nav-number">2.</span> <span class="nav-text">阻塞、非阻塞、同步、异步以及IO多路复用</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#同步阻塞"><span class="nav-number">2.1.</span> <span class="nav-text">同步阻塞</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#同步非阻塞"><span class="nav-number">2.2.</span> <span class="nav-text">同步非阻塞</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#IO多路复用"><span class="nav-number">2.3.</span> <span class="nav-text">IO多路复用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#异步IO"><span class="nav-number">2.4.</span> <span class="nav-text">异步IO</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#IO多路复用-1"><span class="nav-number">3.</span> <span class="nav-text">IO多路复用</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#select"><span class="nav-number">3.1.</span> <span class="nav-text">select</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#poll"><span class="nav-number">3.2.</span> <span class="nav-text">poll</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#epoll"><span class="nav-number">3.3.</span> <span class="nav-text">epoll</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#epoll在Java中的使用"><span class="nav-number">4.</span> <span class="nav-text">epoll在Java中的使用</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#注册感兴趣的事件"><span class="nav-number">4.1.</span> <span class="nav-text">注册感兴趣的事件</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#select方法"><span class="nav-number">4.2.</span> <span class="nav-text">select方法</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#水平触发LT与边缘触发ET"><span class="nav-number">5.</span> <span class="nav-text">水平触发LT与边缘触发ET</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+<div class="copyright" >
+  
+  &copy; 
+  <span itemprop="copyrightYear">2018</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">马超</span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Mist
+  </a>
+</div>
+
+<div>
+<span id="busuanzi_container_site_pv">
+    【本站总PV量<span id="busuanzi_value_site_pv"></span>次】
+</span>
+
+<span id="busuanzi_container_site_uv">
+  【本站总UV量<span id="busuanzi_value_site_uv"></span>次】
+</span>
+</div>
+
+        
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://yoursite.com/2018/05/12/Java网络IO详解/';
+          this.page.identifier = '2018/05/12/Java网络IO详解/';
+          this.page.title = '一文读懂阻塞、非阻塞、同步、异步IO';
+        };
+        var d = document, s = d.createElement('script');
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
