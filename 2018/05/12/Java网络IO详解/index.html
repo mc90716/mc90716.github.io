@@ -105,7 +105,7 @@
 <meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/async.png">
 <meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/register.png">
 <meta property="og:image" content="http://ophjf8lbk.bkt.clouddn.com/select.png">
-<meta property="og:updated_time" content="2018-05-13T01:50:10.000Z">
+<meta property="og:updated_time" content="2018-05-13T01:53:23.000Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="一文读懂阻塞、非阻塞、同步、异步IO">
 <meta name="twitter:description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;在谈及网络IO的时候总避不开阻塞、非阻塞、同步、异步、IO多路复用、select、poll、epoll等这几个词语。在面试的时候也会被经常问到这几个的区别。本文就来讲一下这几个词语的含义、区别以及使用方式。Unix网络编程一书中作者给出了五种IO模型：1、BlockingIO - 阻塞IO2、NoneBlockingIO - 非阻塞IO3、IO">
@@ -379,7 +379,7 @@
 <h2 id="IO多路复用"><a href="#IO多路复用" class="headerlink" title="IO多路复用"></a>IO多路复用</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;IO多路复用也是同步的。<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://ophjf8lbk.bkt.clouddn.com/sync-multx.png" alt=""><br>&nbsp;&nbsp;&nbsp;&nbsp;IO多路复用的方式看起来跟同步阻塞是一样的，两个阶段都是阻塞的，但是IO多路复用可以实现以较小的代价同时监听多个IO。通常情况下是通过一个线程来同时监听多个描述符，只要任何一个满足就绪条件，那么内核态就返回。IO多路复用使得传统的每请求每线程的处理方式得到解耦，一个线程可以同时处理多个IO请求，然后交到后面的线程池里处理，这也是netty等框架的处理方式，所谓的reactor模式。IO多路复用的实现依赖于操作系统的select、poll和epoll，后面会详细介绍这几个系统调用。<br>&nbsp;&nbsp;&nbsp;&nbsp;IO多路复用在Java中的实现方式是在Socket编程中使用非阻塞模式，然后配置感兴趣的事件，通过调用select函数来实现。select函数就是对应的第一个阶段。如果给select配置了超时参数，在指定时间内没有感兴趣事件发生的话，select调用也会返回，这也是为什么要做非阻塞模式下运行。</p>
 <h2 id="异步IO"><a href="#异步IO" class="headerlink" title="异步IO"></a>异步IO</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://ophjf8lbk.bkt.clouddn.com/async.png" alt=""><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;异步模式下，前面提到的两个阶段都不会等待。使用异步模式，用户态调用read方法的时候，相当于告诉内核数据发送给我之后告诉我一声我先去干别的事情了。在这两个阶段都不会等待，只需要在内核态通知数据准备好之后使用即可。通常情况下使用异步模式都会使用callback，当数据可用之后执行callback函数。</p>
 <h1 id="IO多路复用-1"><a href="#IO多路复用-1" class="headerlink" title="IO多路复用"></a>IO多路复用</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;现在用Java开发的网络服务器通常采用IO多路复用的方式来加快网络IO操作，例如Netty、Tomcat等。IO多路复用的基础是select、poll和epoll。这三个函数是从操作系统的角度上支持的IO多路复用的操作，下面就分别来看一下这三个函数。</p>
-<h2 id="select"><a href="#select" class="headerlink" title="select"></a>select</h2><p>函数签名如下：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">int select(int maxfdp1, fd_set *readset,fd_set *writeset,fd_set *exceptset,const struct timeval *timeout)</span><br></pre></td></tr></table></figure></p>
+<h2 id="select"><a href="#select" class="headerlink" title="select"></a>select</h2><p>函数签名如下：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">select</span><span class="params">(<span class="keyword">int</span> maxfdp1, fd_set *readset,fd_set *writeset,fd_set *exceptset,<span class="keyword">const</span> struct timeval *timeout)</span></span></span><br></pre></td></tr></table></figure></p>
 <p>maxfdp1为指定的待监听的描述符的个数，因为描述符是从0开始的，所以需要加1<br>readset为要监听的读描述符<br>writeset为要监听的写描述符<br>exceptset为要监听的异常描述符<br>timeout监听没有准备好的描述符的话，多久可以返回，支持按照秒或者毫秒来配置时间<br>&nbsp;&nbsp;&nbsp;&nbsp;select操作的逻辑是首先将要监听的读、写以及异常描述符拷贝到内核空间，然后遍历所有的描述符，如果有感兴趣的事件发生，那么就返回。<br>select在使用的过程中有三个问题：<br>1、被监控的fds(描述符)集合限制为1024，1024太小了<br>2、需要将描述符集合从用户空间拷贝到内核空间<br>3、当有描述符可操作的时候都需要遍历一下整个描述符集合才能知道哪个是可操作的，效率很低。</p>
 <h2 id="poll"><a href="#poll" class="headerlink" title="poll"></a>poll</h2><p>函数签名如下：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">int poll(struct pollfd[] fds, unsigned int nfds, int timeout);</span><br></pre></td></tr></table></figure></p>
 <p>&nbsp;&nbsp;&nbsp;&nbsp;poll操作与select操作类似，仍旧避免不了描述符从用户空间拷贝到内核空间，但是poll不再有1024个描述符的限制。对于事件的触发通知还是使用遍历所有描述符的方式，因此在大量连接的情况下也存在遍历低效的问题。poll函数在传递参数的时候统一的将要监听的描述符和事件封装在了pollfd结构体数组中。</p>
@@ -433,6 +433,10 @@
           <span class="post-nav-divider"></span>
 
           <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2018/11/28/MySQL索引/" rel="prev" title="MySQL索引">
+                MySQL索引 <i class="fa fa-chevron-right"></i>
+              </a>
             
           </div>
         </div>
@@ -511,7 +515,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">7</span>
+                <span class="site-state-item-count">8</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>

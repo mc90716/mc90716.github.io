@@ -1,0 +1,761 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next mist use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Hexo, NexT" />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="云袭" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;索引用于加快数据访问的速度。把计算机的磁盘比作一本字典，索引就是字段的目录，当我们想快速查到某个词语的时候只需要通过查询目录找到词语所在的页数，然后直接打开某页就可以。MySQL最常用的索引是B+树索引，为什么使用B+作为MySQL的索引，这是许多面试官必问的问题。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MySQL索引">
+<meta property="og:url" content="http://yoursite.com/2018/11/28/MySQL索引/index.html">
+<meta property="og:site_name" content="云袭">
+<meta property="og:description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;索引用于加快数据访问的速度。把计算机的磁盘比作一本字典，索引就是字段的目录，当我们想快速查到某个词语的时候只需要通过查询目录找到词语所在的页数，然后直接打开某页就可以。MySQL最常用的索引是B+树索引，为什么使用B+作为MySQL的索引，这是许多面试官必问的问题。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://piwlsimzs.bkt.clouddn.com/disk_meitu_2.jpg">
+<meta property="og:image" content="http://piwlsimzs.bkt.clouddn.com/B.png">
+<meta property="og:image" content="http://piwlsimzs.bkt.clouddn.com/B+.png">
+<meta property="og:image" content="http://piwlsimzs.bkt.clouddn.com/people.png">
+<meta property="og:image" content="http://pj3lw0htp.bkt.clouddn.com/wechat.jpg">
+<meta property="og:updated_time" content="2018-12-02T08:05:43.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="MySQL索引">
+<meta name="twitter:description" content="介绍&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;索引用于加快数据访问的速度。把计算机的磁盘比作一本字典，索引就是字段的目录，当我们想快速查到某个词语的时候只需要通过查询目录找到词语所在的页数，然后直接打开某页就可以。MySQL最常用的索引是B+树索引，为什么使用B+作为MySQL的索引，这是许多面试官必问的问题。">
+<meta name="twitter:image" content="http://piwlsimzs.bkt.clouddn.com/disk_meitu_2.jpg">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Mist',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2018/11/28/MySQL索引/"/>
+
+
+
+
+
+  <title>MySQL索引 | 云袭</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+	<a href="https://github.com/myunxi"><img style="position: absolute; top: 0; left: 0; border: 0;" src="https://camo.githubusercontent.com/8b6b8ccc6da3aa5722903da7b58eb5ab1081adee/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f6c6566745f6f72616e67655f6666373630302e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_left_orange_ff7600.png"></a>
+
+	
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">云袭</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-th"></i> <br />
+            
+            分类
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-sitemap">
+          <a href="/sitemap.xml" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-sitemap"></i> <br />
+            
+            站点地图
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/11/28/MySQL索引/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="马超">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="云袭">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">MySQL索引</h1>
+        
+
+        <div class="post-meta">
+		
+		 <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-11-28T20:05:05+08:00">
+                2018-11-28
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/2018/11/28/MySQL索引/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count disqus-comment-count"
+                        data-disqus-identifier="2018/11/28/MySQL索引/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <h1 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h1><p>&nbsp;&nbsp;&nbsp;&nbsp;索引用于加快数据访问的速度。把计算机的磁盘比作一本字典，索引就是字段的目录，当我们想快速查到某个词语的时候只需要通过查询目录找到词语所在的页数，然后直接打开某页就可以。MySQL最常用的索引是B+树索引，为什么使用B+作为MySQL的索引，这是许多面试官必问的问题。</p>
+<a id="more"></a>
+<h1 id="为什么B-树"><a href="#为什么B-树" class="headerlink" title="为什么B+树"></a>为什么B+树</h1><h2 id="硬件相关知识"><a href="#硬件相关知识" class="headerlink" title="硬件相关知识"></a>硬件相关知识</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;计算机的磁盘是一个圆盘的接口，圆盘上有一个个的圆圈，数据就是记录在这些圆圈的扇区上。如下图所示<br><img src="http://piwlsimzs.bkt.clouddn.com/disk_meitu_2.jpg" alt=""><br>当计算机系统读取数据的时候要通过以下几个步骤：<br>1、首先移动臂根据柱面号使磁头移动到所需要的柱面上，这一过程被称为寻道。所耗费的时间叫寻道时间(ts)。<br>2、目标扇区旋转到磁头下，这个过程耗费的时间叫旋转时间。<br>&nbsp;&nbsp;&nbsp;&nbsp;因此访问磁盘的时间由三部分构成：<em> 寻道时间+旋转时间+数据传输时间 </em><br>第一部分寻道时间延迟最高，最大可达到100ms，旋转时间取决于磁盘的转速，转速在7200转/分钟的磁盘平均旋转时间在5ms左右。磁盘的读取是以block(盘块)为单位的，位于同一个盘块的数据可以一次性读取出来。在读写数据的时候尽量减少磁头来回移动的次数，避免过多的查找时间。如果每次从磁盘上读取数据的时候都要经历上面的几个过程那么效率上无疑是极低的。</p>
+<h2 id="为什么B-树-1"><a href="#为什么B-树-1" class="headerlink" title="为什么B+树"></a>为什么B+树</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;从上面可以看到，如果随机访问磁盘的速度是很慢的，因此需要设计一个合理的数据结构来减少随机访问磁盘的次数。B树就是这样一种数据结构。</p>
+<h2 id="B树、B-树介绍"><a href="#B树、B-树介绍" class="headerlink" title="B树、B+树介绍"></a>B树、B+树介绍</h2><h3 id="B树"><a href="#B树" class="headerlink" title="B树"></a>B树</h3><p>&nbsp;&nbsp;&nbsp;&nbsp;B树是为存储设备而设计的一种多叉平衡查找树。它与红黑树类似，但是在降低IO操作方面B树的表现要更好一些，B树与红黑树最大的区别在于B树可以有多个子节点，红黑树最多是有两个子节点，这就决定了大多数情况下B树的高度要比红黑树低很多，因此在查找的时候能够降低IO次数。下图是一棵B树：<br><img src="http://piwlsimzs.bkt.clouddn.com/B.png" alt=""><br>B 树又叫平衡多路查找树。一棵m阶的B树的特性如下：<br>&nbsp;&nbsp;&nbsp;&nbsp;a.树中每个结点最多含有m个孩子（m&gt;=2）；<br>&nbsp;&nbsp;&nbsp;&nbsp;b.除根结点和叶子结点外，其它每个结点至少有[ceil(m / 2)]个孩子（其中ceil(x)是一个取上限的函数）；<br>&nbsp;&nbsp;&nbsp;&nbsp;c.若根结点不是叶子结点，则至少有2个孩子（特殊情况：没有孩子的根结点，即根结点为叶子结点，整棵树只有一个根节点）；<br>&nbsp;&nbsp;&nbsp;&nbsp;d.所有叶子结点都出现在同一层，叶子结点不包含任何关键字信息<br>&nbsp;&nbsp;&nbsp;&nbsp;e.每个非终端结点中包含有n个关键字信息： (n，P0，K1，P1，K2，P2，……，Kn，Pn)。其中：<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;a)   Ki (i=1…n)为关键字，且关键字按顺序升序排序K(i-1)&lt; Ki。<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b)   Pi为指向子树根的接点，且指针P(i-1)指向子树种所有结点的关键字均小于Ki，但都大于K(i-1)。<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;c)   关键字的个数n必须满足： [ceil(m / 2)-1]&lt;= n &lt;= m-1。<br>&nbsp;&nbsp;&nbsp;&nbsp;B树中的每个节点都尽可能存储多的关键字信息和分支信息，但是不会超过磁盘块的大小。这样在有效降低了树的高度，在查找的时候可以快速定位在指定的磁盘块。假如要从上图中找到79这个数字，首先从根节点开始扫描，79大于35所以选择P3指针，指向磁盘块4，在磁盘块4中79在65和87之间，因此选择P2指针，选择磁盘块10，这时候就可以从磁盘块10中找到79。整个过程只需要3次IO，如果这棵树被缓存在内存中，那么只需要一次IO就可以读到79这个数字。</p>
+<h3 id="B-树"><a href="#B-树" class="headerlink" title="B+树"></a>B+树</h3><p>&nbsp;&nbsp;&nbsp;&nbsp;B+树是B的变种，一颗m阶B+树和m阶B树的异同点在于：<br>&nbsp;&nbsp;&nbsp;&nbsp;1、有n棵子树的节点中有n-1个关键字(与B树n棵子树有n-1个关键字，保持一致)<br>&nbsp;&nbsp;&nbsp;&nbsp;2、所有的叶子节点中包含了全部的关键字的信息，以及指向含有这些关键字记录的指针，且叶子节点本身依关键字的大小而自小而大顺序链接(而B树的叶子节点并没有包含全部需要查找的信息)<br>&nbsp;&nbsp;&nbsp;&nbsp;3、所有的非终端节点可以看成索引部分，节点中仅含有其子树根节点中最大或者最小的关键字(而B树的非终节点也要包含需要查找的有效信息)<br>&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://piwlsimzs.bkt.clouddn.com/B+.png" alt=""><br>由于B+树的叶子节点是连接在一起的，因此相对于使用B树作为索引，对于MySQL的范围查询更加优化。同时由于叶子节点包含所有关键字信息，因此有的查询语句就不需要回表，只需要查询索引就可以查到需要的数据。</p>
+<h2 id="索引类型"><a href="#索引类型" class="headerlink" title="索引类型"></a>索引类型</h2><h3 id="B树索引"><a href="#B树索引" class="headerlink" title="B树索引"></a>B树索引</h3><p>&nbsp;&nbsp;&nbsp;&nbsp;虽然是叫B树索引，但是数据库实际上使用的是B+树来组织数据。B树索引意味着所有值都是按照顺序存储的，并且每个叶子节点到根节点的距离是相同的。<br>假如有如下数据表：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">CREATE TABLE `people` (</span><br><span class="line">  `last_name` varchar(50) DEFAULT NULL,</span><br><span class="line">  `first_name` varchar(50) DEFAULT NULL,</span><br><span class="line">  `dob` date DEFAULT NULL,</span><br><span class="line">  `gender` enum(&apos;m&apos;,&apos;f&apos;) DEFAULT NULL,</span><br><span class="line">  KEY `last_name` (`last_name`,`first_name`,`dob`)</span><br><span class="line">) ENGINE=InnoDB DEFAULT CHARSET=utf8;</span><br></pre></td></tr></table></figure></p>
+<p>该表对last_name,first_name,dob三列建立了索引，索引的组织方式如下：<br><img src="http://piwlsimzs.bkt.clouddn.com/people.png" alt=""><br>当同时对多列进行索引的时候，索引的顺序是非常重要的，上面的索引首先是按照last_name进行索引，在last_name相同的情况下在对first_name进行排序，最后是dob字段。<br>&nbsp;&nbsp;&nbsp;&nbsp;B树索引适用于全键值、键值范围和最左前缀查找:<br><strong>全键值</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;查找名字为Allen Kim，出生日期为1930-07-12的人，这样的查找方式匹配了索引中的所有字段，依次扫描索引中的last_name、first_name和dob字段，找到对应的数据。<br><strong>键值范围</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;查找姓名在Allen和Barrymore之间的人，这种查找方式也会使用到索引。需要注意的是这里只能是索引中的第一列，也就是last_name的范围查找。<br><strong>前缀匹配</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;查找last_name是以Al开头的人，这种查询会以此扫描索引中的节点，然后选出来对应的复合条件的行。也是只能使用第一列的前缀查询。如果是说想查first_name的前缀匹配，那么是无法使用到索引的，意味着要进行全表扫描。<br><strong>精确匹配某一列，范围批量另外一列</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;精确匹配的列必须是所以中的第一列，范围匹配的列是第二列，这样才能使用到上面的索引。</p>
+<p>B树索引的使用限制：<br>1、不是按照最左列开始查询的，无法使用索引。<br>2、不能跳过索引的列进行查询。<br>3、如果使用到了范围匹配，那么范围匹配右边的列都无法使用索引查询。</p>
+<p>###哈希索引<br>&nbsp;&nbsp;&nbsp;&nbsp;哈希索引使用哈希表来实现，只有是精确匹配的时候才会生效。存储引擎会对索引列计算出一个哈希值，然后保存一个哈希值到行数据的指针。哈希索引由于其特殊的组织方式，限制了其使用场景。哈希索引只适合值比较少的情况，例如枚举类型。在以下几种方式中是不适合使用哈希索引的：<br>1、哈希索引只包含哈希值和指针，不存储字段值，因此使用哈希索引避免不了要进行回表查询。<br>2、哈希索引数据并不是按照值的顺序进行排序的，因此哈希索引无法用来排序<br>3、哈希索引不支持部分索引列匹配。比如说在(A,B)两列上简历哈希索引，那么只有在同时使用A、B两列查询的时候才会使用哈希索引，只使用A列查询无法使用哈希索引。<br>4、哈希索引只支持等值比较，不支持像between and这种范围查询。<br>5、使用哈希索引的时候应该尽量避免哈希冲突。</p>
+<h2 id="后记"><a href="#后记" class="headerlink" title="后记"></a>后记</h2><p>&nbsp;&nbsp;&nbsp;&nbsp;数据库的索引机制解决的问题是在访问内存数据与磁盘数据的速度差别很大的情况下，如何快速访问数据的问题。只有了解了索引的原理才可以更好的设计表的索引字段以及写出性能更优的查询语句。在我们写SQL语句的时候头脑中应该大体上能规划出查询数据以及如何使用索引的过程。下一篇会介绍一下高性能索引的策略，带你设计出更优的索引。</p>
+<hr>
+<p>欢迎关注我的微信公众号：yunxi-talk，分享Java干货，进阶Java程序员必备。<br><img src="http://pj3lw0htp.bkt.clouddn.com/wechat.jpg" alt=""></p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2018/05/12/Java网络IO详解/" rel="next" title="一文读懂阻塞、非阻塞、同步、异步IO">
+                <i class="fa fa-chevron-left"></i> 一文读懂阻塞、非阻塞、同步、异步IO
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+	  <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/images/avatar.gif"
+               alt="马超" />
+          <p class="site-author-name" itemprop="name">马超</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">8</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+        </div>
+
+        
+        
+
+        
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#介绍"><span class="nav-number">1.</span> <span class="nav-text">介绍</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#为什么B-树"><span class="nav-number">2.</span> <span class="nav-text">为什么B+树</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#硬件相关知识"><span class="nav-number">2.1.</span> <span class="nav-text">硬件相关知识</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#为什么B-树-1"><span class="nav-number">2.2.</span> <span class="nav-text">为什么B+树</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#B树、B-树介绍"><span class="nav-number">2.3.</span> <span class="nav-text">B树、B+树介绍</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#B树"><span class="nav-number">2.3.1.</span> <span class="nav-text">B树</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#B-树"><span class="nav-number">2.3.2.</span> <span class="nav-text">B+树</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#索引类型"><span class="nav-number">2.4.</span> <span class="nav-text">索引类型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#B树索引"><span class="nav-number">2.4.1.</span> <span class="nav-text">B树索引</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#后记"><span class="nav-number">2.5.</span> <span class="nav-text">后记</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+<div class="copyright" >
+  
+  &copy; 
+  <span itemprop="copyrightYear">2018</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">马超</span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Mist
+  </a>
+</div>
+
+<div>
+<span id="busuanzi_container_site_pv">
+    【本站总PV量<span id="busuanzi_value_site_pv"></span>次】
+</span>
+
+<span id="busuanzi_container_site_uv">
+  【本站总UV量<span id="busuanzi_value_site_uv"></span>次】
+</span>
+</div>
+
+        
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://yoursite.com/2018/11/28/MySQL索引/';
+          this.page.identifier = '2018/11/28/MySQL索引/';
+          this.page.title = 'MySQL索引';
+        };
+        var d = document, s = d.createElement('script');
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
